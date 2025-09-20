@@ -1,17 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { Link, useNavigate } from "react-router-dom";
-import { Globe, Eye, EyeOff, User, Mail, Lock } from "lucide-react";
-import { useAuth } from "hooks/useAuth";
-import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Link } from "react-router";
+import { Globe, Mic, Eye, EyeOff, CheckCircle, User, Mail, Lock } from "lucide-react";
 
 const SignUp = () => {
-  const navigate = useNavigate();
-  const { register, isLoading, error, isAuthenticated } = useAuth();
-  
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -20,13 +15,6 @@ const SignUp = () => {
     password: "",
     confirmPassword: ""
   });
-
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/onboarding/rss-feed');
-    }
-  }, [isAuthenticated, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -48,25 +36,6 @@ const SignUp = () => {
     if (strength <= 2) return "bg-destructive";
     if (strength === 3) return "bg-soft-orange";
     return "bg-mint-green";
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (formData.password !== formData.confirmPassword) {
-      return; // Error will be shown in UI
-    }
-
-    try {
-      await register({
-        full_name: formData.fullName,
-        email: formData.email,
-        password: formData.password
-      });
-      // Navigation will be handled by the useEffect above
-    } catch (err) {
-      console.error('Registration failed:', err);
-    }
   };
 
   return (
@@ -92,142 +61,123 @@ const SignUp = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Full Name Field */}
-              <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-sm font-medium text-charcoal">
-                  Full Name
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
-                  <Input
-                    id="fullName"
-                    name="fullName"
-                    placeholder="Enter your full name"
-                    value={formData.fullName}
-                    onChange={handleInputChange}
-                    className="pl-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
+            {/* Full Name Field */}
+            <div className="space-y-2">
+              <Label htmlFor="fullName" className="text-sm font-medium text-charcoal">
+                Full Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
+                <Input
+                  id="fullName"
+                  name="fullName"
+                  placeholder="Enter your full name"
+                  value={formData.fullName}
+                  onChange={handleInputChange}
+                  className="pl-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
+                  required
+                />
               </div>
+            </div>
 
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-charcoal">
-                  Email Address
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="pl-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
+            {/* Email Field */}
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium text-charcoal">
+                Email Address
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="pl-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
+                  required
+                />
               </div>
+            </div>
 
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-charcoal">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Create a password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className="pl-10 pr-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
-                    required
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-medium-gray hover:text-charcoal transition-smooth"
-                    disabled={isLoading}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {formData.password && (
-                  <div className="space-y-1">
-                    <div className="flex gap-1">
-                      {[...Array(4)].map((_, i) => (
-                        <div
-                          key={i}
-                          className={`h-1 flex-1 rounded-full transition-smooth ${
-                            i < passwordStrength() ? getStrengthColor() : "bg-light-gray"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-xs text-medium-gray">
-                      Password strength: {["Very weak", "Weak", "Fair", "Good", "Strong"][passwordStrength()]}
-                    </p>
+            {/* Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium text-charcoal">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Create a password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="pl-10 pr-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-medium-gray hover:text-charcoal transition-smooth"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {formData.password && (
+                <div className="space-y-1">
+                  <div className="flex gap-1">
+                    {[...Array(4)].map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1 flex-1 rounded-full transition-smooth ${
+                          i < passwordStrength() ? getStrengthColor() : "bg-light-gray"
+                        }`}
+                      />
+                    ))}
                   </div>
-                )}
-              </div>
-
-              {/* Confirm Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium text-charcoal">
-                  Confirm Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm your password"
-                    value={formData.confirmPassword}
-                    onChange={handleInputChange}
-                    className="pl-10 pr-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
-                    required
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-3 text-medium-gray hover:text-charcoal transition-smooth"
-                    disabled={isLoading}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                  <p className="text-xs text-medium-gray">
+                    Password strength: {["Very weak", "Weak", "Fair", "Good", "Strong"][passwordStrength()]}
+                  </p>
                 </div>
-                {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                  <p className="text-xs text-destructive">Passwords do not match</p>
-                )}
-              </div>
+              )}
+            </div>
 
-              {/* Sign Up Button */}
-              <Button 
-                type="submit" 
-                size="lg" 
-                className="w-full h-12"
-                disabled={isLoading || formData.password !== formData.confirmPassword}
-              >
-                {isLoading ? "Creating Account..." : "Create Account"}
-              </Button>
-            </form>
+            {/* Confirm Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm font-medium text-charcoal">
+                Confirm Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-medium-gray" />
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  className="pl-10 pr-10 h-12 transition-smooth focus:ring-2 focus:ring-ocean-blue"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-3 text-medium-gray hover:text-charcoal transition-smooth"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+            </div>
+
+            {/* Sign Up Button */}
+            <Button size="lg" className="w-full h-12">
+              Create Account
+            </Button>
 
             {/* Login Link */}
             <div className="text-center pt-4 border-t border-border/50">
@@ -258,4 +208,3 @@ const SignUp = () => {
 };
 
 export default SignUp;
-

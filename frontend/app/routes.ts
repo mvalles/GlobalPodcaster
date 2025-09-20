@@ -6,6 +6,7 @@ export default [
     route("/auth/signup", "routes/auth/signup.tsx"),
     //route("routes/forgot-password.tsx"),
     route("/dashboard", "routes/dashboard.tsx"),
+    route("/monitoring", "routes/monitoring.tsx"),
     route("/settings", "routes/settings.tsx"),
     route("/onboarding/rss-feed", "routes/onboarding/rss-feed.tsx"),
     route("/onboarding/voice-sample", "routes/onboarding/voice-sample.tsx"),

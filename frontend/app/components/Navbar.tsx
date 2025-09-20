@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import {
-  Globe,
-  Settings,
-  HelpCircle,
-  LogOut,
+import { Link, useLocation, useNavigate } from "react-router";
+import { 
+  Globe, 
+  Settings, 
+  HelpCircle, 
+  LogOut, 
   User as UserIcon
 } from "lucide-react";
 import {
@@ -15,19 +15,35 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "~/components/ui/avatar";
-import { useAuth } from "hooks/useAuth";
+
+// Mock user data - replace with actual authentication logic
+interface User {
+  full_name: string;
+  email: string;
+}
+
+const mockUser: User = {
+  full_name: "John Doe",
+  email: "john@example.com"
+};
 
 const Navbar = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [currentPageName, setCurrentPageName] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
 
   useEffect(() => {
+    // Set user data (replace with actual authentication logic)
+    setUser(mockUser);
+    
+    // Determine current page based on route
     const pathname = location.pathname;
-    if (pathname === "/dashboard") {
+    if (pathname === "/Dashboard") {
       setCurrentPageName("Dashboard");
-    } else if (pathname === "/settings") {
+    } else if (pathname === "/monitoring") {
+      setCurrentPageName("Monitoring");
+    } else if (pathname === "/Settings") {
       setCurrentPageName("Settings");
     } else {
       setCurrentPageName("");
@@ -36,24 +52,20 @@ const Navbar = () => {
 
   const handleLogout = async () => {
     try {
-      await logout();
+      // Add your logout logic here (clear tokens, etc.)
+      console.log("Logging out...");
+      // Redirect to login page after logout
       navigate("/auth/login");
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
 
-  // Don't show navbar on auth pages and home page
-  const hideNavbarRoutes = ["/", "/auth/login", "/auth/signup"];
-  if (hideNavbarRoutes.includes(location.pathname) || !isAuthenticated) {
-    return null;
-  }
-
   return (
     <nav className="backdrop-blur-md bg-white/80 border-b border-white/20 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <Link to="/dashboard" className="flex items-center gap-3">
+          <Link to="/Dashboard" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
               <Globe className="w-6 h-6 text-white" />
             </div>
@@ -63,21 +75,33 @@ const Navbar = () => {
           </Link>
 
           <div className="flex items-center gap-6">
-            <Link
-              to="/dashboard"
+            <Link 
+              to="/Dashboard"
               className={`font-medium transition-colors ${
-                currentPageName === 'Dashboard'
-                  ? 'text-blue-600'
+                currentPageName === 'Dashboard' 
+                  ? 'text-blue-600' 
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               Dashboard
             </Link>
-            <Link
-              to="/settings"
+            
+            <Link 
+              to="/monitoring"
               className={`font-medium transition-colors ${
-                currentPageName === 'Settings'
-                  ? 'text-blue-600'
+                currentPageName === 'Monitoring' 
+                  ? 'text-blue-600' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Monitoring
+            </Link>
+
+            <Link 
+              to="/Settings"
+              className={`font-medium transition-colors ${
+                currentPageName === 'Settings' 
+                  ? 'text-blue-600' 
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -105,7 +129,7 @@ const Navbar = () => {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link to="/settings" className="flex items-center cursor-pointer">
+                  <Link to="/Settings" className="flex items-center cursor-pointer">
                     <Settings className="w-4 h-4 mr-2" />
                     Settings
                   </Link>

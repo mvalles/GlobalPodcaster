@@ -1,6 +1,6 @@
 import type { Route } from "./+types/home";
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { Globe, Mic, Languages, Zap, ArrowRight } from "lucide-react";
