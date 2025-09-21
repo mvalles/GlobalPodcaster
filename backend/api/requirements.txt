@@ -1,8 +1,25 @@
-deepgram-sdk==2.12.0
+# ===== MCP Framework =====
+mcp==0.9.1
+
+# ===== RSS & Feed Processing =====
 feedparser
-python-dotenv
-fastapi
-uvicorn
-pydantic
+
+# ===== Web Framework (Dashboard & API) =====
+flask
+flask-cors
+
+# ===== HTTP Clients & Async =====
+requests
+aiohttp
+aiofiles
+
+# ===== AI/ML APIs =====
+deepgram-sdk==2.12.0
 elevenlabs
-gtts
+gtts  # Fallback TTS
+
+# ===== Configuration & Environment =====
+python-dotenv
+
+# ===== Scheduling (Optional) =====
+schedule

@@ -1,246 +1,497 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Podcaster - Dashboard</title>
+    <title>🎙️ GlobalPodcaster - Dashboard</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
         .header {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
+            background: linear-gradient(45deg, #2c3e50, #3498db);
             color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .status-card {
+            background: #f8f9fa;
             padding: 20px;
             border-radius: 10px;
-            text-align: center;
-            margin-bottom: 20px;
+            border-left: 5px solid #007bff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        .btn {
-            background: #4CAF50;
+        
+        .status-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .status-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .health-card {
+            background: linear-gradient(45deg, #28a745, #20c997);
             color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 5px;
+            border-left: 5px solid #155724;
         }
-        .btn:hover { background: #45a049; }
-        .btn:disabled { background: #ccc; cursor: not-allowed; }
-        .logs {
-            background: #2c3e50;
-            color: #ecf0f1;
-            padding: 15px;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 14px;
-            white-space: pre-wrap;
+        
+        .health-card .status-value {
+            color: white;
+            font-size: 1.5rem;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .agents-section {
+            margin-bottom: 30px;
+        }
+        
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .agent-card {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .agent-card h4 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+        
+        .agent-status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .status-healthy { color: #28a745; font-weight: bold; }
+        .status-available { color: #28a745; font-weight: bold; }
+        .status-error { color: #dc3545; font-weight: bold; }
+        .status-missing { color: #fd7e14; font-weight: bold; }
+        .status-degraded { color: #ffc107; font-weight: bold; }
+        .status-unknown { color: #6c757d; font-style: italic; }
+        
+        .info-section {
+            background: #e9f7ff;
+            border-left: 4px solid #17a2b8;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .info-section h4 {
+            color: #17a2b8;
+            margin-bottom: 10px;
+        }
+        
+        .info-section p {
+            color: #495057;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+        
+        .log-container {
+            background: #f1f3f4;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
             max-height: 400px;
             overflow-y: auto;
-            margin-top: 20px;
         }
-        .success { color: #2ecc71; }
-        .error { color: #e74c3c; }
-        .info { color: #3498db; }
-        .status {
-            background: white;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            border-left: 4px solid #4CAF50;
+        
+        .log-container h3 {
+            margin-bottom: 15px;
+            color: #333;
         }
-        .results {
-            background: white;
-            padding: 20px;
-            border-radius: 5px;
-            margin-top: 20px;
-            display: none;
+        
+        .log-entry {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            word-wrap: break-word;
         }
-        .mp3-item {
-            background: #f8f9fa;
-            padding: 10px;
-            margin: 5px 0;
-            border-left: 3px solid #4CAF50;
-            border-radius: 3px;
-        }
-        .mp3-title {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        .mp3-url {
-            font-size: 12px;
-            color: #666;
-            word-break: break-all;
-        }
+        
+        .log-info { background: #d1ecf1; color: #0c5460; }
+        .log-success { background: #d4edda; color: #155724; }
+        .log-warning { background: #fff3cd; color: #856404; }
+        .log-error { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🎵 Global Podcaster Dashboard</h1>
-        <p>Pipeline de Procesamiento con Generación de MP3</p>
+    <div class="dashboard">
+        <div class="header">
+            <h1>🎙️ GlobalPodcaster Dashboard</h1>
+            <p>Sistema de Monitoreo de Feeds RSS y Pipeline MCP</p>
+        </div>
+        
+        <div class="content">
+            <!-- Status Cards -->
+            <div class="status-grid">
+                <div class="status-card">
+                    <h3>📊 Total Operations</h3>
+                    <div class="status-value" id="totalChecks">0</div>
+                </div>
+                
+                <div class="status-card">
+                    <h3>🆕 New Episodes</h3>
+                    <div class="status-value" id="newEpisodes">0</div>
+                </div>
+                
+                <div class="status-card">
+                    <h3>🕐 Last Check</h3>
+                    <div class="status-value" id="lastCheck" style="font-size: 1.2rem;">Never</div>
+                </div>
+                
+                <div class="status-card health-card">
+                    <h3>🩺 MCP Health</h3>
+                    <div class="status-value" id="overallHealth">Checking...</div>
+                </div>
+            </div>
+            
+            <!-- Control Buttons -->
+            <div class="controls">
+                <button class="btn btn-success" onclick="executeCheck()">
+                    🔍 Check Feeds
+                </button>
+                <button class="btn btn-primary" onclick="executePipeline()">
+                    🚀 Run Pipeline
+                </button>
+                <button class="btn btn-info" onclick="checkHealth()">
+                    🩺 Check Health
+                </button>
+                <button class="btn btn-warning" onclick="resetState()">
+                    🔄 Reset State
+                </button>
+                <button class="btn btn-secondary" onclick="refreshDashboard()">
+                    📊 Refresh
+                </button>
+            </div>
+            
+            <!-- Information Section -->
+            <div class="info-section">
+                <h4>ℹ️ Cómo Funciona el Sistema MCP</h4>
+                <p>• <strong>Feed Check</strong>: Verifica feeds RSS y detecta nuevos episodios</p>
+                <p>• <strong>Pipeline</strong>: Procesa episodios (transcripción, traducción, TTS)</p>
+                <p>• <strong>Agentes MCP</strong>: Se ejecutan bajo demanda, no permanentemente</p>
+                <p>• <strong>"0 New Episodes"</strong>: Normal si no hay episodios realmente nuevos desde la última verificación</p>
+            </div>
+            
+            <!-- MCP Agents Status -->
+            <div class="agents-section">
+                <h3 style="margin-bottom: 20px; color: #495057;">🤖 Estado de Agentes MCP</h3>
+                <div class="agents-grid">
+                    <div class="agent-card">
+                        <h4>📡 Feed Monitor</h4>
+                        <div class="agent-status">
+                            <span>Estado:</span>
+                            <span id="feedMonitorStatus" class="status-unknown">Checking...</span>
+                        </div>
+                        <div class="agent-status">
+                            <span>Tiempo:</span>
+                            <span id="feedMonitorTime">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4>🎤 Transcription</h4>
+                        <div class="agent-status">
+                            <span>Estado:</span>
+                            <span id="transcriptionStatus" class="status-unknown">Checking...</span>
+                        </div>
+                        <div class="agent-status">
+                            <span>Tiempo:</span>
+                            <span id="transcriptionTime">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4>🌐 Translation</h4>
+                        <div class="agent-status">
+                            <span>Estado:</span>
+                            <span id="translationStatus" class="status-unknown">Checking...</span>
+                        </div>
+                        <div class="agent-status">
+                            <span>Tiempo:</span>
+                            <span id="translationTime">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4>🔊 Text-to-Speech</h4>
+                        <div class="agent-status">
+                            <span>Estado:</span>
+                            <span id="ttsStatus" class="status-unknown">Checking...</span>
+                        </div>
+                        <div class="agent-status">
+                            <span>Tiempo:</span>
+                            <span id="ttsTime">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Activity Log -->
+            <div class="log-container">
+                <h3>📋 Activity Log</h3>
+                <div id="logContainer"></div>
+            </div>
+        </div>
     </div>
-    
-    <div class="status">
-        <strong>Estado:</strong> <span id="status">Listo para iniciar</span>
-    </div>
-    
-    <button id="sessionBtn" class="btn" onclick="createSession()">📋 Crear Sesión</button>
-    <button id="pipelineBtn" class="btn" onclick="executePipeline()" disabled>🚀 Ejecutar Pipeline Completo</button>
-    
-    <div id="results" class="results">
-        <h3>📈 Resultados del Pipeline</h3>
-        <div id="mp3List"></div>
-    </div>
-    
-    <div id="logs" class="logs">Esperando comandos...</div>
 
     <script>
-        let session = null;
-        let executing = false;
-
-        function log(msg, type = 'info') {
-            const logs = document.getElementById('logs');
-            const time = new Date().toLocaleTimeString();
-            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
-            logs.innerHTML += `<span class="${className}">[${time}] ${msg}</span>\n`;
-            logs.scrollTop = logs.scrollHeight;
+        let logEntries = [];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logEntries.unshift(logEntry);
+            
+            if (logEntries.length > 50) {
+                logEntries.pop();
+            }
+            
+            updateLogDisplay(logEntry, type);
         }
-
-        function updateStatus(msg) {
-            document.getElementById('status').textContent = msg;
-        }
-
-        function showResults(data) {
-            const results = document.getElementById('results');
-            const mp3List = document.getElementById('mp3List');
+        
+        function updateLogDisplay(entry, type) {
+            const logContainer = document.getElementById('logContainer');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log-entry log-${type}`;
+            logDiv.textContent = entry;
             
-            results.style.display = 'block';
+            logContainer.insertBefore(logDiv, logContainer.firstChild);
             
-            const content = data.result?.content || data;
-            const feeds = content.feeds_checked || 0;
-            const episodes = content.new_episodes_found || 0;
-            const orchestrator = content.orchestrator_result || {};
-            const mp3Results = orchestrator.results || [];
-            
-            mp3List.innerHTML = `
-                <div class="mp3-item">
-                    <div class="mp3-title">📊 Resumen del Pipeline</div>
-                    <div class="mp3-url">Feeds: ${feeds} | Episodios: ${episodes} | MP3s generados: ${mp3Results.length}</div>
-                </div>
-            `;
-            
-            if (mp3Results.length > 0) {
-                mp3Results.forEach((result, i) => {
-                    if (result.content && Array.isArray(result.content)) {
-                        result.content.forEach((item, j) => {
-                            if (item.tts_audio_url) {
-                                mp3List.innerHTML += `
-                                    <div class="mp3-item">
-                                        <div class="mp3-title">🎵 MP3 ${i+1}-${j+1}: ${item.title}</div>
-                                        <div class="mp3-url">${item.tts_audio_url}</div>
-                                    </div>
-                                `;
-                            }
-                        });
-                    }
-                });
+            if (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.lastChild);
             }
         }
-
-        function createSession() {
-            session = {id: 'session-' + Date.now()};
-            document.getElementById('sessionBtn').textContent = '✅ Sesión Activa';
-            document.getElementById('sessionBtn').disabled = true;
-            document.getElementById('pipelineBtn').disabled = false;
-            log('✅ Sesión creada exitosamente: ' + session.id, 'success');
-            updateStatus('Sesión activa - Listo para ejecutar pipeline');
+        
+        function updateStats(stats) {
+            document.getElementById('totalChecks').textContent = stats.total_checks || 0;
+            document.getElementById('newEpisodes').textContent = stats.new_episodes || 0;
+            document.getElementById('lastCheck').textContent = stats.last_check || 'Never';
         }
-
+        
+        function updateAgentHealth(healthData) {
+            if (healthData && healthData.agents) {
+                const agents = healthData.agents;
+                
+                updateAgentStatus('feedMonitorStatus', 'feedMonitorTime', agents.feed_monitor);
+                updateAgentStatus('transcriptionStatus', 'transcriptionTime', agents.transcription);
+                updateAgentStatus('translationStatus', 'translationTime', agents.translation);
+                updateAgentStatus('ttsStatus', 'ttsTime', agents.tts);
+                
+                document.getElementById('overallHealth').textContent = healthData.overall_health || 'Unknown';
+            }
+        }
+        
+        function updateAgentStatus(statusId, timeId, agentData) {
+            const statusElement = document.getElementById(statusId);
+            const timeElement = document.getElementById(timeId);
+            
+            if (agentData) {
+                statusElement.textContent = agentData.status || 'unknown';
+                statusElement.className = `status-${agentData.status || 'unknown'}`;
+                timeElement.textContent = agentData.response_time ? `${agentData.response_time}ms` : '-';
+            }
+        }
+        
+        async function executeCheck() {
+            log('🔍 Ejecutando verificación de feeds...', 'info');
+            
+            try {
+                const response = await fetch('/api/execute-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const count = data.new_episodes_found || 0;
+                    log(`✅ Verificación completada - ${count} episodios nuevos`, 'success');
+                } else {
+                    log(`❌ Error: ${data.error}`, 'error');
+                }
+                
+                refreshStats();
+            } catch (error) {
+                log(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+        
         async function executePipeline() {
-            if (!session) {
-                log('❌ No hay sesión activa', 'error');
+            log('🚀 Ejecutando pipeline completo...', 'info');
+            
+            try {
+                const response = await fetch('/api/execute-pipeline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Pipeline completado exitosamente', 'success');
+                } else {
+                    log(`❌ Error en pipeline: ${data.error}`, 'error');
+                }
+                
+                refreshStats();
+            } catch (error) {
+                log(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+        
+        async function checkHealth() {
+            log('🩺 Verificando salud de agentes MCP...', 'info');
+            
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Verificación de salud completada', 'success');
+                    updateAgentHealth(data);
+                } else {
+                    log('❌ Error al verificar salud de agentes', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function resetState() {
+            if (!confirm('¿Resetear estado de feeds? Todos los episodios se detectarán como nuevos.')) {
                 return;
             }
             
-            executing = true;
-            document.getElementById('pipelineBtn').disabled = true;
-            document.getElementById('pipelineBtn').textContent = '⏳ Ejecutando...';
-            
-            log('🚀 Iniciando pipeline completo de Global Podcaster...', 'info');
-            log('📋 Comando: CHECK_FEEDS → transcripción → traducción → TTS → MP3', 'info');
-            updateStatus('Ejecutando pipeline...');
+            log('🔄 Reseteando estado...', 'warning');
             
             try {
-                const response = await fetch('/api/execute-real-pipeline', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'CHECK_FEEDS',
-                        method: 'direct'
-                    })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    log('✅ Pipeline ejecutado exitosamente!', 'success');
-                    
-                    // Parsear resultados
-                    const content = result.result?.content || result;
-                    const feeds = content.feeds_checked || 0;
-                    const episodes = content.new_episodes_found || 0;
-                    const orchestrator = content.orchestrator_result || {};
-                    
-                    log(`📊 Feeds verificados: ${feeds}`, 'success');
-                    log(`🎵 Episodios nuevos encontrados: ${episodes}`, 'success');
-                    log(`🔧 Status orchestrator: ${orchestrator.status || 'N/A'}`, 'info');
-                    
-                    if (orchestrator.results && orchestrator.results.length > 0) {
-                        let totalMp3s = 0;
-                        orchestrator.results.forEach(result => {
-                            if (result.content && Array.isArray(result.content)) {
-                                result.content.forEach(item => {
-                                    if (item.tts_audio_url) {
-                                        totalMp3s++;
-                                        log(`🎵 MP3 generado: ${item.title}`, 'success');
-                                        log(`   📂 URL: ${item.tts_audio_url}`, 'info');
-                                    }
-                                });
-                            }
-                        });
-                        log(`🎉 ¡${totalMp3s} MP3s generados exitosamente!`, 'success');
-                        showResults(result);
-                    } else {
-                        log('⚠️ No se generaron MP3s. Verificar configuración.', 'error');
-                    }
-                    
-                    updateStatus(`Pipeline completado - ${orchestrator.results?.length || 0} resultados`);
+                const response = await fetch('/api/reset-feed-state', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Estado reseteado', 'success');
                 } else {
-                    const errorText = await response.text();
-                    log('❌ Error en pipeline: ' + response.status, 'error');
-                    log('❌ Detalles: ' + errorText, 'error');
-                    updateStatus('Error en pipeline');
+                    log(`❌ Error: ${data.error}`, 'error');
                 }
             } catch (error) {
-                log('❌ Error de conexión: ' + error.message, 'error');
-                log('💡 Asegúrate de que el servidor Vite esté corriendo', 'info');
-                updateStatus('Error de conexión');
+                log(`❌ Error: ${error.message}`, 'error');
             }
-            
-            executing = false;
-            document.getElementById('pipelineBtn').disabled = false;
-            document.getElementById('pipelineBtn').textContent = '🚀 Ejecutar Pipeline Completo';
         }
-
-        // Inicializar dashboard
-        document.addEventListener('DOMContentLoaded', function() {
-            log('🔧 Global Podcaster Dashboard inicializado', 'success');
-            log('💡 Crear sesión para comenzar el proceso', 'info');
-            log('📋 El pipeline incluye: Feed Monitor → Transcripción → Traducción → TTS → MP3', 'info');
+        
+        async function refreshStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                updateStats(data);
+            } catch (error) {
+                console.error('Error refreshing stats:', error);
+            }
+        }
+        
+        async function refreshDashboard() {
+            log('📊 Actualizando dashboard...', 'info');
+            await refreshStats();
+            await checkHealth();
+            log('✅ Dashboard actualizado', 'success');
+        }
+        
+        // Auto-refresh
+        setInterval(refreshStats, 5000);
+        setInterval(checkHealth, 10000);
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            log('🚀 GlobalPodcaster Dashboard iniciado', 'info');
+            refreshDashboard();
         });
     </script>
 </body>
