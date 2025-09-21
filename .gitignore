@@ -164,3 +164,6 @@ test-results/
 
 # Large files that shouldn't be in git
 *.dump
+
+_legacy
+_test_scripts

@@ -188,11 +188,14 @@ def notify_orchestrator(new_episodes: List[Dict[str, Any]]) -> Dict[str, Any]:
                 
             feeds_processed.add(feed_url)
             
-            # El orchestrator espera el feed_url como content
+            # Obtener episodios de este feed específico
+            feed_episodes = [ep for ep in new_episodes if ep.get('feed_url') == feed_url]
+            
+            # Enviar episodios directamente al orchestrator
             coral_msg = {
                 "sender": "feed-monitor-agent",
                 "receiver": "orchestrator", 
-                "content": feed_url
+                "content": feed_episodes
             }
             
             log_info(f"Sending feed URL to orchestrator: {feed_url}")
