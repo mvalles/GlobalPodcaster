@@ -47,8 +47,24 @@ def get_feeds() -> List[str]:
         for line in f:
             line = line.strip()
             if line and not line.startswith('#'):
-                feeds.append(line)
-    logger.info(f"Feeds cargados: {feeds}")
+                # Leer metadatos del feed
+                feed_url = line
+                try:
+                    feed = feedparser.parse(feed_url)
+                    owner_email = (
+                        feed.feed.get('managingeditor') or
+                        feed.feed.get('author') or
+                        (feed.feed.get('itunes_owner', {}).get('email') if 'itunes_owner' in feed.feed else None)
+                    )
+                    feeds.append({
+                        'feed_url': feed_url,
+                        'owner_email': owner_email or '',
+                        'feed_title': feed.feed.get('title', ''),
+                    })
+                except Exception as e:
+                    logger.warning(f"No se pudo leer metadatos de {feed_url}: {e}")
+                    feeds.append({'feed_url': feed_url, 'owner_email': '', 'feed_title': ''})
+    logger.info(f"Feeds cargados: {[f['feed_url'] for f in feeds]}")
     return feeds
 
 def get_feed_id(feed_url: str) -> str:
@@ -205,8 +221,15 @@ async def call_tool(req: CallToolRequest):
         try:
             feeds = get_feeds()
             all_new_episodes = []
-            for feed_url in feeds:
+            for feed in feeds:
+                feed_url = feed['feed_url']
+                owner_email = feed.get('owner_email', '')
+                feed_title = feed.get('feed_title', '')
                 new_episodes = check_feed_for_new_episodes(feed_url)
+                # Añadir metadatos de feed a cada episodio
+                for ep in new_episodes:
+                    ep['owner_email'] = owner_email
+                    ep['feed_title'] = feed_title
                 all_new_episodes.extend(new_episodes)
             total_episodes = len(all_new_episodes)
             start_idx = (page - 1) * per_page
