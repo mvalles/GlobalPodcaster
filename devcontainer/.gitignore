@@ -16,3 +16,6 @@ docker-compose.yml.local
 # Temporary files
 *.tmp
 *.temp
+
+# Firebase Service Account file
+serviceAccountKey.json

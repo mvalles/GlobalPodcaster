@@ -10,6 +10,8 @@ import hashlib
 import time
 import logging
 import feedparser
+import firebase_admin
+from firebase_admin import credentials, firestore
 from typing import List, Dict, Any
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -37,34 +39,30 @@ def get_state_dir() -> str:
     state_path = os.path.join(script_dir, STATE_DIR)
     return state_path
 
-def get_feeds() -> List[str]:
-    feeds_path = get_feeds_file_path()
-    if not os.path.exists(feeds_path):
-        logger.warning(f"Archivo de feeds no encontrado en {feeds_path}. No se cargan feeds.")
-        return []
+
+# --- Inicialización Firebase Admin ---
+FIREBASE_CRED_PATH = os.environ.get("FIREBASE_CRED_PATH", "devcontainer/serviceAccountKey.json")
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_CRED_PATH)
+    firebase_admin.initialize_app(cred)
+db = firestore.client()
+
+def get_all_feeds_firestore() -> List[dict]:
     feeds = []
-    with open(feeds_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#'):
-                # Leer metadatos del feed
-                feed_url = line
-                try:
-                    feed = feedparser.parse(feed_url)
-                    owner_email = (
-                        feed.feed.get('managingeditor') or
-                        feed.feed.get('author') or
-                        (feed.feed.get('itunes_owner', {}).get('email') if 'itunes_owner' in feed.feed else None)
-                    )
-                    feeds.append({
-                        'feed_url': feed_url,
-                        'owner_email': owner_email or '',
-                        'feed_title': feed.feed.get('title', ''),
-                    })
-                except Exception as e:
-                    logger.warning(f"No se pudo leer metadatos de {feed_url}: {e}")
-                    feeds.append({'feed_url': feed_url, 'owner_email': '', 'feed_title': ''})
-    logger.info(f"Feeds cargados: {[f['feed_url'] for f in feeds]}")
+    users_ref = db.collection("users")
+    users = users_ref.stream()
+    for user in users:
+        uid = user.id
+        feeds_ref = users_ref.document(uid).collection("feeds")
+        for feed_doc in feeds_ref.stream():
+            feed_data = feed_doc.to_dict()
+            feeds.append({
+                "feed_url": feed_data.get("feed_url", ""),
+                "owner_email": feed_data.get("owner_email", ""),
+                "feed_title": feed_data.get("nombre", ""),
+                "user_id": uid
+            })
+    logger.info(f"Feeds Firestore cargados: {[f['feed_url'] for f in feeds]}")
     return feeds
 
 def get_feed_id(feed_url: str) -> str:
@@ -130,6 +128,28 @@ def check_feed_for_new_episodes(feed_url: str) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error checking feed {feed_url}: {e}")
         return []
+def add_feed_to_user(user_id: str, feed_url: str, custom_name: str = "", active: bool = True):
+    feed_id = get_feed_id(feed_url)
+    user_feed_ref = db.collection("users").document(user_id).collection("feeds").document(feed_id)
+    feed_ref = db.collection("feeds").document(feed_id)
+    # Añadir feed a usuario
+    user_feed_ref.set({
+        "active": active,
+        "added_at": firestore.SERVER_TIMESTAMP,
+        "custom_name": custom_name
+    }, merge=True)
+    # Si el feed global no existe, crearlo con metadatos básicos
+    if not feed_ref.get().exists:
+        # Descargar metadatos del feed de forma dinámica
+        feed_data = feedparser.parse(feed_url)
+        metadata = dict(feed_data.feed)
+        feed_ref.set({
+            "feed_url": feed_url,
+            "metadata": metadata,
+            "created_at": firestore.SERVER_TIMESTAMP
+        }, merge=True)
+    # La subcolección processed_episodes queda vacía inicialmente
+    return {"status": "success", "feed_id": feed_id}
 
 # --- FastAPI MCP HTTP Server ---
 app = FastAPI(title="Feed Monitor MCP HTTP Agent")
@@ -204,7 +224,7 @@ async def call_tool(req: CallToolRequest):
     if name == "get_feed_list":
         logger.info("Tool: get_feed_list invocado")
         try:
-            feeds = get_feeds()
+            feeds = get_all_feeds_firestore()
             result = {
                 "status": "success",
                 "feeds": feeds,
@@ -219,7 +239,7 @@ async def call_tool(req: CallToolRequest):
         page = arguments.get("page", 1)
         per_page = min(arguments.get("per_page", 20), 50)
         try:
-            feeds = get_feeds()
+            feeds = get_all_feeds_firestore()
             all_new_episodes = []
             for feed in feeds:
                 feed_url = feed['feed_url']
@@ -280,6 +300,21 @@ async def call_tool(req: CallToolRequest):
             return JSONResponse(content=result)
         except Exception as e:
             logger.error(f"Error en mark_episodes_processed: {e}")
+            return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
+
+    elif name == "add_feed_to_user":
+        logger.info("Tool: add_feed_to_user invocada")
+        user_id = arguments.get("user_id")
+        feed_url = arguments.get("feed_url")
+        custom_name = arguments.get("custom_name", "")
+        active = arguments.get("active", True)
+        if not user_id or not feed_url:
+            return JSONResponse(content={"status": "error", "error": "user_id y feed_url son obligatorios"}, status_code=400)
+        try:
+            result = add_feed_to_user(user_id, feed_url, custom_name, active)
+            return JSONResponse(content=result)
+        except Exception as e:
+            logger.error(f"Error en add_feed_to_user: {e}")
             return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
     else:
         return JSONResponse(content={"error": f"Unknown tool: {name}"}, status_code=400)
