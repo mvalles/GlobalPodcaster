@@ -25,15 +25,25 @@ from feed_tools import (
 )
 
 # --- Inicialización de Firebase Admin y Firestore ---
-FIREBASE_KEY_PATH = os.environ.get('FIREBASE_KEY_PATH')
-if not FIREBASE_KEY_PATH:
-    # Ruta por defecto para desarrollo local
-    FIREBASE_KEY_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../devcontainer/serviceAccountKey.json'))
-if not os.path.exists(FIREBASE_KEY_PATH):
-    raise FileNotFoundError(f"No se encontró el archivo de credenciales de Firebase en: {FIREBASE_KEY_PATH}. Define la variable de entorno FIREBASE_KEY_PATH o coloca el archivo en la ruta por defecto.")
-if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_KEY_PATH)
-    firebase_admin.initialize_app(cred)
+
+# Permitir inicialización desde variable FIREBASE_KEY_JSON o desde fichero
+firebase_key_json = os.environ.get('FIREBASE_KEY_JSON')
+if firebase_key_json:
+    import json
+    firebase_key_dict = json.loads(firebase_key_json)
+    cred = credentials.Certificate(firebase_key_dict)
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+else:
+    FIREBASE_KEY_PATH = os.environ.get('FIREBASE_KEY_PATH')
+    if not FIREBASE_KEY_PATH:
+        # Ruta por defecto para desarrollo local
+        FIREBASE_KEY_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../devcontainer/serviceAccountKey.json'))
+    if not os.path.exists(FIREBASE_KEY_PATH):
+        raise FileNotFoundError(f"No se encontró el archivo de credenciales de Firebase en: {FIREBASE_KEY_PATH}. Define la variable de entorno FIREBASE_KEY_PATH o coloca el archivo en la ruta por defecto.")
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # --- Configuración de logging ---
