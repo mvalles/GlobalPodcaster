@@ -236,4 +236,11 @@ async def call_tool(req: CallToolRequest):
         return JSONResponse(content={"error": f"Unknown tool: {name}"}, status_code=400)
 
 if __name__ == "__main__":
-    uvicorn.run("feed_monitor_mcp_http_server:app", host="0.0.0.0", port=8000, reload=True)
+    import argparse
+    parser = argparse.ArgumentParser(description="Feed Monitor MCP HTTP Agent")
+    parser.add_argument('--port', type=int, default=None, help='Puerto en el que escuchar')
+    args = parser.parse_args()
+
+    # Prioridad: argumento --port > variable de entorno PORT > 8000
+    port = args.port or int(os.environ.get('PORT', 8000))
+    uvicorn.run("feed_monitor_mcp_http_server:app", host="0.0.0.0", port=port, reload=True)
