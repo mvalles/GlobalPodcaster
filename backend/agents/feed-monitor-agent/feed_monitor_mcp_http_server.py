@@ -4,19 +4,30 @@ Feed Monitor Agent - Servidor MCP HTTP
 
 Servidor MCP que proporciona herramientas para monitoreo de feeds RSS vía HTTP (FastAPI).
 """
-import json
-import os
-import hashlib
-import time
+# ...existing code...
 import logging
-import feedparser
 import firebase_admin
+import os
 from firebase_admin import credentials, firestore
-from typing import List, Dict, Any
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
+from feed_utils import get_feed_id
+from feed_tools import add_feed_to_user, delete_feed_from_user, get_all_feeds, check_feed_for_new_episodes
+
+# --- Inicialización de Firebase Admin y Firestore ---
+FIREBASE_KEY_PATH = os.environ.get('FIREBASE_KEY_PATH')
+if not FIREBASE_KEY_PATH:
+    # Ruta por defecto para desarrollo local
+    FIREBASE_KEY_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../devcontainer/serviceAccountKey.json'))
+if not os.path.exists(FIREBASE_KEY_PATH):
+    raise FileNotFoundError(f"No se encontró el archivo de credenciales de Firebase en: {FIREBASE_KEY_PATH}. Define la variable de entorno FIREBASE_KEY_PATH o coloca el archivo en la ruta por defecto.")
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_KEY_PATH)
+    firebase_admin.initialize_app(cred)
+db = firestore.client()
+
 # --- Configuración de logging ---
 logging.basicConfig(
     level=logging.INFO,
@@ -25,139 +36,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("feed-monitor-mcp-http")
 
-# --- Utilidades y lógica de negocio (copiado de feed_monitor_mcp_server) ---
-FEEDS_FILE = "feeds.txt"
-STATE_DIR = "feed_monitor_state"
-
-def get_feeds_file_path() -> str:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    feeds_path = os.path.join(script_dir, "..", "..", FEEDS_FILE)
-    return os.path.abspath(feeds_path)
-
-def get_state_dir() -> str:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    state_path = os.path.join(script_dir, STATE_DIR)
-    return state_path
-
-
-# --- Inicialización Firebase Admin ---
-FIREBASE_CRED_PATH = os.environ.get("FIREBASE_CRED_PATH", "devcontainer/serviceAccountKey.json")
-if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CRED_PATH)
-    firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-def get_all_feeds_firestore() -> List[dict]:
-    feeds = []
-    users_ref = db.collection("users")
-    users = users_ref.stream()
-    for user in users:
-        uid = user.id
-        feeds_ref = users_ref.document(uid).collection("feeds")
-        for feed_doc in feeds_ref.stream():
-            feed_data = feed_doc.to_dict()
-            feeds.append({
-                "feed_url": feed_data.get("feed_url", ""),
-                "owner_email": feed_data.get("owner_email", ""),
-                "feed_title": feed_data.get("nombre", ""),
-                "user_id": uid
-            })
-    logger.info(f"Feeds Firestore cargados: {[f['feed_url'] for f in feeds]}")
-    return feeds
-
-def get_feed_id(feed_url: str) -> str:
-    return hashlib.md5(feed_url.encode()).hexdigest()[:12]
-
-def load_last_check(feed_id: str) -> Dict[str, Any]:
-    state_dir = get_state_dir()
-    last_check_file = os.path.join(state_dir, f"last_check_{feed_id}.json")
-    if os.path.exists(last_check_file):
-        try:
-            with open(last_check_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    return {"episodes": [], "last_check": 0}
-
-def save_last_check(feed_id: str, episodes: List[str], timestamp: float):
-    state_dir = get_state_dir()
-    os.makedirs(state_dir, exist_ok=True)
-    last_check_file = os.path.join(state_dir, f"last_check_{feed_id}.json")
-    data = {
-        "episodes": episodes,
-        "last_check": timestamp
-    }
-    try:
-        with open(last_check_file, 'w') as f:
-            json.dump(data, f, indent=2)
-        logger.info(f"Guardado estado de feed {feed_id} con {len(episodes)} episodios procesados.")
-    except IOError as e:
-        logger.error(f"Error saving last check: {e}")
-
-def check_feed_for_new_episodes(feed_url: str) -> List[Dict[str, Any]]:
-    try:
-        logger.info(f"Verificando feed: {feed_url}")
-        feed = feedparser.parse(feed_url)
-        if feed.bozo:
-            logger.warning(f"Feed bozo detectado en {feed_url}")
-            return []
-        feed_id = get_feed_id(feed_url)
-        last_check_data = load_last_check(feed_id)
-        # Usar list comprehension para construir current_episodes y current_guids
-        entries = [
-            {
-                'guid': entry.get('id', entry.get('link', '')),
-                'title': entry.get('title', 'No Title'),
-                'description': entry.get('summary', ''),
-                'link': entry.get('link', ''),
-                'published': entry.get('published', ''),
-                'feed_title': feed.feed.get('title', 'Unknown Feed')
-            }
-            for entry in feed.entries
-            if entry.get('id', entry.get('link', ''))
-        ]
-        current_guids = set(ep['guid'] for ep in entries)
-        previous_guids = set(last_check_data.get('episodes', []))
-        new_guids = current_guids - previous_guids
-        new_episodes = [
-            {**ep, 'feed_url': feed_url, 'feed_id': feed_id}
-            for ep in entries if ep['guid'] in new_guids
-        ]
-        logger.info(f"Nuevos episodios detectados en {feed_url}: {len(new_episodes)}")
-        return new_episodes
-    except Exception as e:
-        logger.error(f"Error checking feed {feed_url}: {e}")
-        return []
-def add_feed_to_user(user_id: str, feed_url: str, custom_name: str = "", active: bool = True):
-    feed_id = get_feed_id(feed_url)
-    user_feed_ref = db.collection("users").document(user_id).collection("feeds").document(feed_id)
-    feed_ref = db.collection("feeds").document(feed_id)
-    # Añadir feed a usuario
-    user_feed_ref.set({
-        "active": active,
-        "added_at": firestore.SERVER_TIMESTAMP,
-        "custom_name": custom_name
-    }, merge=True)
-    # Si el feed global no existe, crearlo con metadatos básicos
-    if not feed_ref.get().exists:
-        # Descargar metadatos del feed de forma dinámica
-        feed_data = feedparser.parse(feed_url)
-        metadata = dict(feed_data.feed)
-        feed_ref.set({
-            "feed_url": feed_url,
-            "metadata": metadata,
-            "created_at": firestore.SERVER_TIMESTAMP
-        }, merge=True)
-    # La subcolección processed_episodes queda vacía inicialmente
-    return {"status": "success", "feed_id": feed_id}
 
 # --- FastAPI MCP HTTP Server ---
 app = FastAPI(title="Feed Monitor MCP HTTP Agent")
 
 TOOLS = [
     {
-        "name": "get_feed_list",
-        "description": "Obtiene la lista de feeds RSS configurados",
+        "name": "get_user_feeds",
+        "description": "Obtiene solo los feeds de un usuario, con la información personalizada de la subcolección feeds interna",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string", "description": "ID del usuario"}
+            },
+            "required": ["user_id"]
+        }
+    },
+    {
+        "name": "get_all_feeds",
+        "description": "Obtiene la información de todos los feeds globales (colección feeds)",
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -166,45 +63,50 @@ TOOLS = [
     },
     {
         "name": "get_new_episodes",
-        "description": "Obtiene nuevos episodios con paginación para evitar respuestas grandes",
+        "description": "Obtiene nuevos episodios no procesados de todos los feeds (máximo 100)",
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "page": {
-                    "type": "integer",
-                    "description": "Número de página (empezando en 1)",
-                    "default": 1
-                },
-                "per_page": {
-                    "type": "integer",
-                    "description": "Episodios por página (máximo 50)",
-                    "default": 20
-                }
-            },
+            "properties": {},
             "required": []
         }
     },
     {
-        "name": "mark_episodes_processed",
-        "description": "Marca episodios específicos como procesados después de completar el pipeline TTS",
+        "name": "add_feed_to_user",
+        "description": "Añade un feed RSS a la lista de un usuario",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "episodes": {
-                    "type": "array",
-                    "description": "Lista de episodios procesados con guid, feed_url y feed_id",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "guid": {"type": "string"},
-                            "feed_url": {"type": "string"},
-                            "feed_id": {"type": "string"}
-                        },
-                        "required": ["guid", "feed_url", "feed_id"]
-                    }
-                }
+                "user_id": {"type": "string", "description": "ID del usuario"},
+                "feed_url": {"type": "string", "description": "URL del feed a añadir"},
+                "custom_name": {"type": "string", "description": "Nombre personalizado del feed"},
+                "active": {"type": "boolean", "description": "Si el feed está activo"}
             },
-            "required": ["episodes"]
+            "required": ["user_id", "feed_url"]
+        }
+    },
+    {
+        "name": "delete_feed_from_user",
+        "description": "Elimina un feed RSS de la lista de un usuario",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string", "description": "ID del usuario"},
+                "feed_url": {"type": "string", "description": "URL del feed a eliminar"}
+            },
+            "required": ["user_id", "feed_url"]
+        }
+    },
+    {
+        "name": "mark_episode_processed",
+        "description": "Marca un episodio como procesado en la subcolección processed_episodes de un feed, guardando metadatos y timestamp.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "feed_id": {"type": "string", "description": "ID del feed"},
+                "guid": {"type": "string", "description": "GUID del episodio"},
+                "metadata": {"type": "object", "description": "Metadatos del episodio"}
+            },
+            "required": ["feed_id", "guid", "metadata"]
         }
     }
 ]
@@ -221,87 +123,37 @@ async def list_tools():
 async def call_tool(req: CallToolRequest):
     name = req.name
     arguments = req.arguments
-    if name == "get_feed_list":
-        logger.info("Tool: get_feed_list invocado")
+    if name == "get_user_feeds":
+        logger.info("Tool: get_user_feeds invocado")
+        user_id = arguments.get("user_id")
+        if not user_id:
+            return JSONResponse(content={"status": "error", "error": "user_id es obligatorio"}, status_code=400)
         try:
-            feeds = get_all_feeds_firestore()
-            result = {
-                "status": "success",
-                "feeds": feeds,
-                "count": len(feeds)
-            }
+            from feed_tools import get_user_feeds_main
+            result = get_user_feeds_main(db, user_id)
             return JSONResponse(content=result)
         except Exception as e:
-            logger.error(f"Error en get_feed_list: {e}")
+            logger.error(f"Error en get_user_feeds: {e}")
+            return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
+    elif name == "get_all_feeds":
+        logger.info("Tool: get_all_feeds invocado")
+        try:
+            from feed_tools import get_all_feeds_main
+            result = get_all_feeds_main(db)
+            return JSONResponse(content=result)
+        except Exception as e:
+            logger.error(f"Error en get_all_feeds: {e}")
             return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
     elif name == "get_new_episodes":
         logger.info("Tool: get_new_episodes invocado")
-        page = arguments.get("page", 1)
-        per_page = min(arguments.get("per_page", 20), 50)
         try:
-            feeds = get_all_feeds_firestore()
-            all_new_episodes = []
-            for feed in feeds:
-                feed_url = feed['feed_url']
-                owner_email = feed.get('owner_email', '')
-                feed_title = feed.get('feed_title', '')
-                new_episodes = check_feed_for_new_episodes(feed_url)
-                # Añadir metadatos de feed a cada episodio
-                for ep in new_episodes:
-                    ep['owner_email'] = owner_email
-                    ep['feed_title'] = feed_title
-                all_new_episodes.extend(new_episodes)
-            total_episodes = len(all_new_episodes)
-            start_idx = (page - 1) * per_page
-            end_idx = start_idx + per_page
-            page_episodes = all_new_episodes[start_idx:end_idx]
-            total_pages = (total_episodes + per_page - 1) // per_page
-            result = {
-                "status": "success",
-                "page": page,
-                "per_page": per_page,
-                "total_episodes": total_episodes,
-                "total_pages": total_pages,
-                "episodes": page_episodes
-            }
-            logger.info(f"get_new_episodes: {len(page_episodes)} episodios en la página {page}")
+            from feed_tools import get_new_episodes_main
+            result = get_new_episodes_main(db)
+            logger.info(f"get_new_episodes: {result['total_episodes']} episodios devueltos")
             return JSONResponse(content=result)
         except Exception as e:
             logger.error(f"Error en get_new_episodes: {e}")
             return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
-    elif name == "mark_episodes_processed":
-        logger.info("Tool: mark_episodes_processed invocado")
-        episodes = arguments.get("episodes", [])
-        if not episodes:
-            logger.warning("mark_episodes_processed llamado sin episodios")
-            return JSONResponse(content={"error": "episodes list is required"}, status_code=400)
-        try:
-            episodes_by_feed = {}
-            for ep in episodes:
-                feed_id = ep.get("feed_id")
-                if feed_id:
-                    if feed_id not in episodes_by_feed:
-                        episodes_by_feed[feed_id] = []
-                    episodes_by_feed[feed_id].append(ep["guid"])
-            processed_count = 0
-            for feed_id, guids in episodes_by_feed.items():
-                last_check_data = load_last_check(feed_id)
-                current_episodes = set(last_check_data.get('episodes', []))
-                current_episodes.update(guids)
-                current_time = time.time()
-                save_last_check(feed_id, list(current_episodes), current_time)
-                processed_count += len(guids)
-            result = {
-                "status": "success",
-                "processed_episodes": processed_count,
-                "feeds_updated": len(episodes_by_feed)
-            }
-            logger.info(f"Episodios marcados como procesados: {processed_count}")
-            return JSONResponse(content=result)
-        except Exception as e:
-            logger.error(f"Error en mark_episodes_processed: {e}")
-            return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
-
     elif name == "add_feed_to_user":
         logger.info("Tool: add_feed_to_user invocada")
         user_id = arguments.get("user_id")
@@ -311,10 +163,38 @@ async def call_tool(req: CallToolRequest):
         if not user_id or not feed_url:
             return JSONResponse(content={"status": "error", "error": "user_id y feed_url son obligatorios"}, status_code=400)
         try:
-            result = add_feed_to_user(user_id, feed_url, custom_name, active)
+            from feed_tools import add_feed_to_user_main
+            result = add_feed_to_user_main(db, user_id, feed_url, custom_name, active)
             return JSONResponse(content=result)
         except Exception as e:
             logger.error(f"Error en add_feed_to_user: {e}")
+            return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
+    elif name == "delete_feed_from_user":
+        logger.info("Tool: delete_feed_from_user invocada")
+        user_id = arguments.get("user_id")
+        feed_url = arguments.get("feed_url")
+        if not user_id or not feed_url:
+            return JSONResponse(content={"status": "error", "error": "user_id y feed_url son obligatorios"}, status_code=400)
+        try:
+            from feed_tools import delete_feed_from_user_main
+            result = delete_feed_from_user_main(db, user_id, feed_url)
+            return JSONResponse(content=result)
+        except Exception as e:
+            logger.error(f"Error en delete_feed_from_user: {e}")
+            return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
+    elif name == "mark_episode_processed":
+        logger.info("Tool: mark_episode_processed invocada")
+        feed_id = arguments.get("feed_id")
+        guid = arguments.get("guid")
+        metadata = arguments.get("metadata")
+        if not feed_id or not guid or metadata is None:
+            return JSONResponse(content={"status": "error", "error": "feed_id, guid y metadata son obligatorios"}, status_code=400)
+        try:
+            from feed_tools import mark_episode_processed_main
+            result = mark_episode_processed_main(db, feed_id, guid, metadata)
+            return JSONResponse(content=result)
+        except Exception as e:
+            logger.error(f"Error en mark_episode_processed: {e}")
             return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
     else:
         return JSONResponse(content={"error": f"Unknown tool: {name}"}, status_code=400)
