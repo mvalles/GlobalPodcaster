@@ -1,22 +1,32 @@
+
 """
 Funciones principales (main) para las herramientas del agente Feed Monitor MCP.
 Cada función encapsula la lógica de negocio y delega en helpers definidos en feed_utils.py.
 """
 
-from feed_utils import (
-    get_user_feeds,
-    get_all_feeds,
-    add_feed_to_user,
-    delete_feed_from_user,
-    check_feed_for_new_episodes,
-    mark_episode_processed
-)
+from firebase_admin import firestore
+from feed_utils import get_feed_id, check_feed_for_new_episodes
 
 def get_user_feeds_main(db, user_id: str):
     """
     Devuelve los feeds de un usuario con información personalizada.
     """
-    feeds = get_user_feeds(db, user_id)
+    feeds = []
+    user_ref = db.collection("users").document(user_id)
+    feeds_ref = user_ref.collection("feeds")
+    for feed_doc in feeds_ref.stream():
+        feed_data = feed_doc.to_dict()
+        feed_id = feed_doc.id
+        global_feed_ref = db.collection("feeds").document(feed_id)
+        global_feed = global_feed_ref.get()
+        feed_url = global_feed.to_dict().get("feed_url", "") if global_feed.exists else ""
+        feeds.append({
+            "feed_id": feed_id,
+            "feed_url": feed_url,
+            "custom_name": feed_data.get("custom_name", ""),
+            "active": feed_data.get("active", True),
+            "added_at": feed_data.get("added_at", None),
+        })
     return {
         "status": "success",
         "feeds": feeds,
@@ -27,26 +37,80 @@ def get_all_feeds_main(db):
     """
     Devuelve todos los feeds globales registrados en la colección feeds.
     """
-    feeds = get_all_feeds(db)
+    feeds = []
+    feeds_ref = db.collection("feeds")
+    for feed_doc in feeds_ref.stream():
+        feed_data = feed_doc.to_dict()
+        feed_id = feed_doc.id
+        feed_obj = {
+            "feed_id": feed_id,
+            "feed_url": feed_data.get("feed_url", ""),
+            "created_at": feed_data.get("created_at", None),
+            "metadata": feed_data.get("metadata", {}),
+        }
+        feeds.append(feed_obj)
     return {
         "status": "success",
         "feeds": feeds,
         "count": len(feeds)
     }
 
-def add_feed_to_user_main(db, user_id: str, feed_url: str, custom_name: str = "", active: bool = True):
+def add_feed_to_user_main(db, user_id: str, feed_url: str, custom_name: str = "", active: bool = True, email: str = None):
     """
     Añade un feed RSS a la lista de un usuario y lo registra globalmente si es nuevo.
     """
-    result = add_feed_to_user(db, user_id, feed_url, custom_name, active)
-    return result
+    feed_id = get_feed_id(feed_url)
+    user_ref = db.collection("users").document(user_id)
+    user_feed_ref = user_ref.collection("feeds").document(feed_id)
+    feed_ref = db.collection("feeds").document(feed_id)
+    # Guardar el email como campo adicional en el documento del usuario si se proporciona
+    if email:
+        user_ref.set({"email": email}, merge=True)
+    user_feed_ref.set({
+        "active": active,
+        "added_at": firestore.SERVER_TIMESTAMP,
+        "custom_name": custom_name
+    }, merge=True)
+    if not feed_ref.get().exists:
+        import feedparser
+        feed_data = feedparser.parse(feed_url)
+        metadata = dict(feed_data.feed)
+        feed_ref.set({
+            "feed_url": feed_url,
+            "metadata": metadata,
+            "created_at": firestore.SERVER_TIMESTAMP
+        }, merge=True)
+    return {"status": "success", "feed_id": feed_id}
 
-def delete_feed_from_user_main(db, user_id: str, feed_url: str):
+def delete_feed_from_user_main(db, user_id: str, feed_url: str, logger=None):
     """
     Elimina un feed RSS de la lista de un usuario y lo borra globalmente si no lo usa nadie más.
     """
-    result = delete_feed_from_user(db, user_id, feed_url)
-    return result
+    feed_id = get_feed_id(feed_url)
+    user_feed_ref = db.collection("users").document(user_id).collection("feeds").document(feed_id)
+    feed_ref = db.collection("feeds").document(feed_id)
+    try:
+        user_feed_ref.delete()
+        if logger:
+            logger.info(f"Feed {feed_id} eliminado del usuario {user_id}")
+        users_ref = db.collection("users")
+        users = users_ref.stream()
+        feed_still_used = False
+        for user in users:
+            uid = user.id
+            other_feed_ref = users_ref.document(uid).collection("feeds").document(feed_id)
+            if other_feed_ref.get().exists:
+                feed_still_used = True
+                break
+        if not feed_still_used:
+            feed_ref.delete()
+            if logger:
+                logger.info(f"Feed {feed_id} eliminado de la colección global feeds")
+        return {"status": "success", "feed_id": feed_id, "feed_global_deleted": not feed_still_used}
+    except Exception as e:
+        if logger:
+            logger.error(f"Error eliminando feed {feed_id} de usuario {user_id}: {e}")
+        return {"status": "error", "error": str(e)}
 
 def get_new_episodes_main(db, max_episodes=100):
     """
@@ -71,5 +135,29 @@ def mark_episode_processed_main(db, feed_id: str, guid: str, metadata: dict):
     """
     Marca un episodio como procesado en la subcolección processed_episodes de un feed.
     """
-    result = mark_episode_processed(db, feed_id, guid, metadata)
-    return result
+    processed_ref = db.collection("feeds").document(feed_id).collection("processed_episodes").document(guid)
+    processed_ref.set({
+        "metadata": metadata,
+        "processed_at": firestore.SERVER_TIMESTAMP
+    }, merge=True)
+    return {"status": "success", "feed_id": feed_id, "guid": guid}
+
+def validate_rss_feed_main(feed_url: str):
+    """
+    Función principal para validar un RSS feed. Devuelve dict con is_valid, title, description y error si aplica.
+    """
+    import feedparser
+    feed = feedparser.parse(feed_url)
+    if feed.bozo:
+        error_msg = str(feed.bozo_exception) if hasattr(feed, 'bozo_exception') else "Invalid RSS feed"
+        return {
+            "is_valid": False,
+            "error": error_msg
+        }
+    title = feed.feed.get("title", "")
+    description = feed.feed.get("description", "")
+    return {
+        "is_valid": True,
+        "title": title,
+        "description": description
+    }

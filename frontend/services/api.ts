@@ -1,11 +1,27 @@
-import type { User } from "types";
-
-const API_BASE_URL = 'http://localhost:5555';
-
-interface ApiResponse<T = any> {
-  data: T;
-  message?: string;
+// Añadir podcast a usuario
+export async function createPodcast(podcastData: { rss_feed_url: string; title?: string; description?: string; user_id: string; email: string }) {
+  const agentUrl = MCP_AGENTS['feed-monitor-agent'];
+  if (!agentUrl) throw new Error('MCP agent domain not configured for: feed-monitor-agent');
+  const response = await fetchWithAuth('/call_tool', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'add_feed_to_user',
+      arguments: {
+        user_id: podcastData.user_id, // UID
+        email: podcastData.email,     // Email
+        feed_url: podcastData.rss_feed_url,
+        custom_name: podcastData.title || '',
+        active: true,
+      }
+    }),
+  }, agentUrl);
+  return response.json();
 }
+
+import type { User } from "types";
+import { MCP_AGENTS } from "./mcpAgentsConfig";
+
+const API_BASE_URL = 'http://localhost:5555'; // Backend principal
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -14,19 +30,19 @@ class ApiError extends Error {
   }
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+
+async function fetchWithAuth(url: string, options: RequestInit = {}, baseUrl: string = API_BASE_URL): Promise<Response> {
   const token = localStorage.getItem('auth_token');
-  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    (headers as Record<string, string>)["authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${url}`, {
+  const response = await fetch(`${baseUrl}${url}`, {
     ...options,
     headers,
   });
@@ -89,67 +105,16 @@ export async function updateUser(userData: Partial<User>) {
   return response.json();
 }
 
-// Podcast API
-export async function fetchPodcasts() {
-  const response = await fetchWithAuth('/podcasts');
-  return response.json();
-}
 
-export async function createPodcast(podcastData: {
-  rss_feed_url: string;
-  title?: string;
-  description?: string;
-}) {
-  const response = await fetchWithAuth('/podcasts', {
+export async function validateRssFeed(feed_url: string) {
+  const agentUrl = MCP_AGENTS['feed-monitor-agent'];
+  if (!agentUrl) throw new Error('MCP agent domain not configured for: feed-monitor-agent');
+  const response = await fetchWithAuth('/call_tool', {
     method: 'POST',
-    body: JSON.stringify(podcastData),
-  });
-  return response.json();
-}
-
-export async function validateRssFeed(url: string) {
-  const response = await fetchWithAuth('/podcasts/validate-rss', {
-    method: 'POST',
-    body: JSON.stringify({ url }),
-  });
-  return response.json();
-}
-
-// Translation API
-export async function fetchTranslations() {
-  const response = await fetchWithAuth('/translations');
-  return response.json();
-}
-
-export async function createTranslation(data: {
-  podcast_id: number;
-  target_languages: string[];
-}) {
-  const response = await fetchWithAuth('/translations', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-  return response.json();
-}
-
-// File Upload API
-export async function uploadVoiceSample(file: File) {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE_URL}/upload/voice-sample`, {
-    method: 'POST',
-    headers: {
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || 'Upload failed');
-  }
-
+    body: JSON.stringify({
+      name: 'validateRssFeed',
+      arguments: { feed_url }
+    }),
+  }, agentUrl);
   return response.json();
 }

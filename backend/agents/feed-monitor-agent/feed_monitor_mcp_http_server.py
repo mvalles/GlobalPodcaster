@@ -4,17 +4,25 @@ Feed Monitor Agent - Servidor MCP HTTP
 
 Servidor MCP que proporciona herramientas para monitoreo de feeds RSS vía HTTP (FastAPI).
 """
-# ...existing code...
 import logging
 import firebase_admin
 import os
 from firebase_admin import credentials, firestore
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from feed_utils import get_feed_id
-from feed_tools import add_feed_to_user, delete_feed_from_user, get_all_feeds, check_feed_for_new_episodes
+from feed_tools import (
+    add_feed_to_user_main,
+    delete_feed_from_user_main,
+    get_all_feeds_main,
+    get_new_episodes_main,
+    get_user_feeds_main,
+    mark_episode_processed_main,
+    validate_rss_feed_main
+)
 
 # --- Inicialización de Firebase Admin y Firestore ---
 FIREBASE_KEY_PATH = os.environ.get('FIREBASE_KEY_PATH')
@@ -38,9 +46,30 @@ logger = logging.getLogger("feed-monitor-mcp-http")
 
 
 # --- FastAPI MCP HTTP Server ---
+
 app = FastAPI(title="Feed Monitor MCP HTTP Agent")
 
+# --- Middleware CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Cambia esto por los dominios permitidos en producción
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 TOOLS = [
+    {
+        "name": "validateRssFeed",
+        "description": "Valida si una URL es un RSS feed correcto. Devuelve is_valid, title, description y error si aplica.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "feed_url": {"type": "string", "description": "URL del feed RSS a validar"}
+            },
+            "required": ["feed_url"]
+        }
+    },
     {
         "name": "get_user_feeds",
         "description": "Obtiene solo los feeds de un usuario, con la información personalizada de la subcolección feeds interna",
@@ -76,7 +105,8 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "user_id": {"type": "string", "description": "ID del usuario"},
+                "user_id": {"type": "string", "description": "ID del usuario (UID o email)"},
+                "email": {"type": "string", "description": "Email del usuario (opcional, para guardar como campo)"},
                 "feed_url": {"type": "string", "description": "URL del feed a añadir"},
                 "custom_name": {"type": "string", "description": "Nombre personalizado del feed"},
                 "active": {"type": "boolean", "description": "Si el feed está activo"}
@@ -123,13 +153,23 @@ async def list_tools():
 async def call_tool(req: CallToolRequest):
     name = req.name
     arguments = req.arguments
-    if name == "get_user_feeds":
+    if name == "validateRssFeed":
+        logger.info("Tool: validateRssFeed invocada")
+        feed_url = arguments.get("feed_url")
+        if not feed_url:
+            return JSONResponse(content={"status": "error", "error": "feed_url es obligatoria"}, status_code=400)
+        try:
+            result = validate_rss_feed_main(feed_url)
+            return JSONResponse(content=result)
+        except Exception as e:
+            logger.error(f"Error en validateRssFeed: {e}")
+            return JSONResponse(content={"is_valid": False, "error": str(e)}, status_code=500)
+    elif name == "get_user_feeds":
         logger.info("Tool: get_user_feeds invocado")
         user_id = arguments.get("user_id")
         if not user_id:
             return JSONResponse(content={"status": "error", "error": "user_id es obligatorio"}, status_code=400)
         try:
-            from feed_tools import get_user_feeds_main
             result = get_user_feeds_main(db, user_id)
             return JSONResponse(content=result)
         except Exception as e:
@@ -138,7 +178,6 @@ async def call_tool(req: CallToolRequest):
     elif name == "get_all_feeds":
         logger.info("Tool: get_all_feeds invocado")
         try:
-            from feed_tools import get_all_feeds_main
             result = get_all_feeds_main(db)
             return JSONResponse(content=result)
         except Exception as e:
@@ -147,7 +186,6 @@ async def call_tool(req: CallToolRequest):
     elif name == "get_new_episodes":
         logger.info("Tool: get_new_episodes invocado")
         try:
-            from feed_tools import get_new_episodes_main
             result = get_new_episodes_main(db)
             logger.info(f"get_new_episodes: {result['total_episodes']} episodios devueltos")
             return JSONResponse(content=result)
@@ -163,8 +201,8 @@ async def call_tool(req: CallToolRequest):
         if not user_id or not feed_url:
             return JSONResponse(content={"status": "error", "error": "user_id y feed_url son obligatorios"}, status_code=400)
         try:
-            from feed_tools import add_feed_to_user_main
-            result = add_feed_to_user_main(db, user_id, feed_url, custom_name, active)
+            email = arguments.get("email")
+            result = add_feed_to_user_main(db, user_id, feed_url, custom_name, active, email=email)
             return JSONResponse(content=result)
         except Exception as e:
             logger.error(f"Error en add_feed_to_user: {e}")
@@ -176,7 +214,6 @@ async def call_tool(req: CallToolRequest):
         if not user_id or not feed_url:
             return JSONResponse(content={"status": "error", "error": "user_id y feed_url son obligatorios"}, status_code=400)
         try:
-            from feed_tools import delete_feed_from_user_main
             result = delete_feed_from_user_main(db, user_id, feed_url)
             return JSONResponse(content=result)
         except Exception as e:
@@ -190,7 +227,6 @@ async def call_tool(req: CallToolRequest):
         if not feed_id or not guid or metadata is None:
             return JSONResponse(content={"status": "error", "error": "feed_id, guid y metadata son obligatorios"}, status_code=400)
         try:
-            from feed_tools import mark_episode_processed_main
             result = mark_episode_processed_main(db, feed_id, guid, metadata)
             return JSONResponse(content=result)
         except Exception as e:

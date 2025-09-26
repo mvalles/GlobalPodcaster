@@ -7,6 +7,8 @@ import {
   ScrollRestoration,
 } from "react-router";
 
+import { AppProvider } from "../contexts/appContext";
+
 import type { Route } from "./+types/root";
 import "./app.css";
 import Navbar from "./components/Navbar";
@@ -44,10 +46,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <>
+    <AppProvider>
       <Navbar />
       <Outlet />
-    </>
+    </AppProvider>
   );
 }
 

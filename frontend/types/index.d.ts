@@ -1,9 +1,11 @@
 export interface User {
-  id: number;
-  full_name: string;
-  email: string;
-  onboarding_completed: boolean;
-  preferred_languages: string[];
+  uid: string; // Firebase UID, también usado como id
+  email: string | null;
+  displayName: string | null; // Firebase displayName, también usado como full_name
+  photoURL?: string | null;
+  // Campos personalizados opcionales
+  onboarding_completed?: boolean;
+  preferred_languages?: string[];
   voice_sample_url?: string;
   notification_preferences?: {
     email_alerts: boolean;

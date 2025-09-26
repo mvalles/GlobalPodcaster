@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Checkbox } from "~/components/ui/checkbox";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { Globe, Mic, Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { useAuth } from "hooks/useAuth";
 import { Alert, AlertDescription } from "~/components/ui/alert";

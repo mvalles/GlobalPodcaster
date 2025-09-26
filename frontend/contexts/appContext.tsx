@@ -2,6 +2,13 @@ import React, { createContext, useContext, useReducer, useEffect, type ReactNode
 import { appReducer, initialState } from 'reducers/appReducer';
 import type { AppState, User } from '../types';
 import * as api from '../services/api';
+import { auth } from '../firebaseConfig';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
 
 interface AppContextType {
   state: AppState;
@@ -12,10 +19,10 @@ interface AppContextType {
   register: (userData: RegisterData) => Promise<void>;
   fetchUser: () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
-  fetchPodcasts: () => Promise<void>;
-  createPodcast: (podcastData: CreatePodcastData) => Promise<void>;
-  fetchTranslations: () => Promise<void>;
-  uploadVoiceSample: (file: File) => Promise<string>;
+  fetchPodcasts?: () => Promise<void>;
+  createPodcast?: (podcastData: CreatePodcastData) => Promise<void>;
+  fetchTranslations?: () => Promise<void>;
+  uploadVoiceSample?: (file: File) => Promise<string>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -37,42 +44,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Initialize app - check for existing auth
   useEffect(() => {
-    initializeApp();
-  }, []);
-
-  const initializeApp = async () => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       dispatch({ type: 'SET_LOADING', payload: true });
-      try {
-        await fetchUser();
-      } catch (error) {
-        localStorage.removeItem('auth_token');
-        dispatch({ type: 'SET_AUTH_ERROR', payload: 'Session expired' });
+      if (firebaseUser) {
+        // Opcional: puedes obtener datos adicionales del usuario aquí
+        const userData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          id: firebaseUser.uid,
+          full_name: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+        };
+        dispatch({ type: 'LOGIN_SUCCESS', payload: userData });
+        // Si tienes onboarding, puedes llamar a fetchPodcasts y fetchTranslations aquí
+      } else {
+        dispatch({ type: 'LOGOUT' });
       }
       dispatch({ type: 'SET_LOADING', payload: false });
-    }
-  };
+    });
+    return () => unsubscribe();
+  }, []);
 
   const login = async (email: string, password: string) => {
     dispatch({ type: 'SET_AUTH_LOADING', payload: true });
     dispatch({ type: 'SET_AUTH_ERROR', payload: null });
-
     try {
-      const response = await api.login({ email, password });
-      localStorage.setItem('auth_token', response.token);
-      
-      // Fetch user data after login
-      const userData = await api.fetchUser();
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+      const userData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+          id: firebaseUser.uid,
+          full_name: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+      };
       dispatch({ type: 'LOGIN_SUCCESS', payload: userData });
-
-      // If user is authenticated, fetch their data
-      if (userData.onboarding_completed) {
-        await Promise.all([
-          fetchPodcasts(),
-          fetchTranslations()
-        ]);
-      }
+      // Si tienes onboarding, puedes llamar a fetchPodcasts y fetchTranslations aquí
     } catch (error: any) {
       dispatch({ type: 'SET_AUTH_ERROR', payload: error.message || 'Login failed' });
     } finally {
@@ -82,25 +91,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await api.logout();
+      await signOut(auth);
+      dispatch({ type: 'LOGOUT' });
     } catch (error) {
       console.error('Logout error:', error);
-    } finally {
-      localStorage.removeItem('auth_token');
-      dispatch({ type: 'LOGOUT' });
     }
   };
 
   const register = async (userData: RegisterData) => {
     dispatch({ type: 'SET_AUTH_LOADING', payload: true });
     dispatch({ type: 'SET_AUTH_ERROR', payload: null });
-
     try {
-      const response = await api.register(userData);
-      localStorage.setItem('auth_token', response.token);
-      
-      const user = await api.fetchUser();
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+      const firebaseUser = userCredential.user;
+      // Opcional: puedes actualizar el perfil con el nombre
+      // await updateProfile(firebaseUser, { displayName: userData.full_name });
+      const userDataObj = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: userData.full_name,
+          id: firebaseUser.uid,
+          full_name: userData.full_name,
+          photoURL: firebaseUser.photoURL,
+      };
+      dispatch({ type: 'LOGIN_SUCCESS', payload: userDataObj });
     } catch (error: any) {
       dispatch({ type: 'SET_AUTH_ERROR', payload: error.message || 'Registration failed' });
     } finally {
@@ -131,52 +145,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchPodcasts = async () => {
-    try {
-      const podcasts = await api.fetchPodcasts();
-      dispatch({ type: 'SET_PODCASTS', payload: podcasts });
-    } catch (error: any) {
-      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to fetch podcasts' });
-    }
-  };
+  // const fetchPodcasts = async () => {
+  //   try {
+  //     const podcasts = await api.fetchPodcasts();
+  //     dispatch({ type: 'SET_PODCASTS', payload: podcasts });
+  //   } catch (error: any) {
+  //     dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to fetch podcasts' });
+  //   }
+  // };
+
+  // const fetchTranslations = async () => {
+  //   try {
+  //     const translations = await api.fetchTranslations();
+  //     dispatch({ type: 'SET_TRANSLATIONS', payload: translations });
+  //   } catch (error: any) {
+  //     dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to fetch translations' });
+  //   }
+  // };
+
+  // const uploadVoiceSample = async (file: File) => {
+  //   dispatch({ type: 'SET_LOADING', payload: true });
+  //   try {
+  //     const response = await api.uploadVoiceSample(file);
+  //     
+  //     // Update user with new voice sample URL
+  //     const updatedUser = { ...state.auth.user!, voice_sample_url: response.file_url };
+  //     dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+  //     
+  //     return response.file_url;
+  //   } catch (error: any) {
+  //     dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to upload voice sample' });
+  //     throw error;
+  //   } finally {
+  //     dispatch({ type: 'SET_LOADING', payload: false });
+  //   }
+  // };
+
 
   const createPodcast = async (podcastData: CreatePodcastData) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const newPodcast = await api.createPodcast(podcastData);
+  const userId = state.auth.user?.uid;
+  const email = state.auth.user?.email;
+  if (!userId || !email) throw new Error('No authenticated user or email');
+  const newPodcast = await api.createPodcast({ ...podcastData, user_id: userId, email });
       dispatch({ type: 'ADD_PODCAST', payload: newPodcast });
-      
-      // Fetch updated translations after creating podcast
-      await fetchTranslations();
     } catch (error: any) {
       dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to create podcast' });
-      throw error;
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
-  };
-
-  const fetchTranslations = async () => {
-    try {
-      const translations = await api.fetchTranslations();
-      dispatch({ type: 'SET_TRANSLATIONS', payload: translations });
-    } catch (error: any) {
-      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to fetch translations' });
-    }
-  };
-
-  const uploadVoiceSample = async (file: File) => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const response = await api.uploadVoiceSample(file);
-      
-      // Update user with new voice sample URL
-      const updatedUser = { ...state.auth.user!, voice_sample_url: response.file_url };
-      dispatch({ type: 'UPDATE_USER', payload: updatedUser });
-      
-      return response.file_url;
-    } catch (error: any) {
-      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to upload voice sample' });
       throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -191,10 +206,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     register,
     fetchUser,
     updateUser,
-    fetchPodcasts,
+    // fetchPodcasts,
     createPodcast,
-    fetchTranslations,
-    uploadVoiceSample,
+    // fetchTranslations,
+    // uploadVoiceSample,
   };
 
   return <AppContext.Provider value={contextValue}>
