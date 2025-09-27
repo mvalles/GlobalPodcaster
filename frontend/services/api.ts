@@ -1,7 +1,8 @@
 import type { User } from "types";
 import { MCP_AGENTS } from "./mcpAgentsConfig";
 
-const API_BASE_URL = 'http://localhost:5555'; // Backend principal
+//const API_BASE_URL = 'http://localhost:5555'; // Backend principal (Development)
+const API_BASE_URL = 'https://user-api-production-daed.up.railway.app'; // Backend principal (Production)
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {

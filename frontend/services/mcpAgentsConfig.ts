@@ -3,7 +3,7 @@
 
 export const MCP_AGENTS: Record<string, string> = {
   //'feed-monitor-agent': 'http://localhost:8000',
-  'feed-monitor-agent': 'https://globalpodcaster-production.up.railway.app'
+  'feed-monitor-agent': 'https://feed-monitor-production.up.railway.app'
   // Agrega aquí los demás agentes cuando estén desplegados
   // 'transcription-agent': 'https://transcription-agent.railway.app',
   // 'translation-agent': 'https://translation-agent.railway.app',
