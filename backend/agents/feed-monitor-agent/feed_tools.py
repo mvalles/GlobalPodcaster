@@ -119,7 +119,8 @@ def get_new_episodes_main(db, max_episodes=100):
     """
     Devuelve hasta max_episodes episodios nuevos no procesados de todos los feeds globales.
     """
-    feeds = get_all_feeds(db)
+    feeds_result = get_all_feeds_main(db)
+    feeds = feeds_result.get('feeds', [])
     all_new_episodes = []
     for feed in feeds:
         if len(all_new_episodes) >= max_episodes:
