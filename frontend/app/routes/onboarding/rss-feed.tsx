@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -27,13 +27,26 @@ import * as api from "services/api";
 
 export default function OnboardingRSSFeed() {
   const navigate = useNavigate();
-  const { createPodcast, state } = useApp();
-  
+  const { createPodcast, state, dispatch } = useApp();
   const [rssUrl, setRssUrl] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [isValid, setIsValid] = useState<boolean | null>(null);
   const [error, setError] = useState("");
   const [podcastData, setPodcastData] = useState<any>(null);
+  const [hasFeed, setHasFeed] = useState<boolean | null>(null);
+  // Check if user already has a feed
+  useEffect(() => {
+    const checkUserFeeds = async () => {
+      if (!state.auth.user?.uid) return;
+      try {
+        const result = await api.getUserFeeds(state.auth.user.uid);
+        setHasFeed(result.feeds && result.feeds.length > 0);
+      } catch (err) {
+        setHasFeed(false); // fallback: allow onboarding
+      }
+    };
+    checkUserFeeds();
+  }, [state.auth.user?.uid]);
 
   const validateRSSFeed = async (url: string) => {
     if (!url || !url.startsWith('http')) {
@@ -69,8 +82,18 @@ export default function OnboardingRSSFeed() {
     if (!podcastData) return;
 
     try {
-      await createPodcast(podcastData);
-      navigate("/onboarding/voice-sample");
+      if (createPodcast) {
+        await createPodcast(podcastData);
+      }
+      // Mark onboarding as completed in Firestore and context
+      if (state.auth.user?.uid) {
+        const updatedUser = await api.updateUser({ onboarding_completed: true });
+        // Update context so onboarding_completed is reflected immediately
+        if (updatedUser) {
+          dispatch({ type: 'UPDATE_USER', payload: { ...state.auth.user, onboarding_completed: true } });
+        }
+      }
+      navigate("/dashboard");
     } catch (error: any) {
       setError(error.message || "Error creating podcast. Please try again.");
     }
@@ -87,6 +110,48 @@ export default function OnboardingRSSFeed() {
     validateRSSFeed(rssUrl);
   };
 
+  // Show loading or error while checking feeds
+  if (hasFeed === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+        <span className="ml-3 text-blue-700">Checking your podcast feeds...</span>
+      </div>
+    );
+  }
+  if (hasFeed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="w-full max-w-lg"
+        >
+          <Card className="backdrop-blur-md bg-white/90 shadow-2xl border-0 overflow-hidden">
+            <CardHeader className="flex flex-col items-center gap-2 pb-4">
+              <CheckCircle className="w-12 h-12 text-green-500 mb-2" />
+              <CardTitle className="text-2xl font-bold text-gray-900">Podcast Feed Already Added</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 px-8 pb-8 text-center">
+              <p className="text-gray-700 text-lg">
+                You already have a <span className="font-semibold text-blue-700">podcast RSS feed</span> registered.<br />
+                You can manage your feed and view episodes in the <span className="font-semibold text-purple-700">dashboard</span>.
+              </p>
+              <Button size="lg" className="mt-2 w-full flex items-center justify-center gap-2" onClick={() => navigate("/dashboard")}> 
+                <ArrowRight className="w-5 h-5" /> Go to Dashboard
+              </Button>
+              <div className="mt-4 flex items-center justify-center gap-2 text-gray-400 text-sm">
+                <Rss className="w-4 h-4" />
+                <span>Only one feed can be registered per user.</span>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+  // ...existing code for onboarding UI...
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
       <motion.div

@@ -1,23 +1,3 @@
-// Añadir podcast a usuario
-export async function createPodcast(podcastData: { rss_feed_url: string; title?: string; description?: string; user_id: string; email: string }) {
-  const agentUrl = MCP_AGENTS['feed-monitor-agent'];
-  if (!agentUrl) throw new Error('MCP agent domain not configured for: feed-monitor-agent');
-  const response = await fetchWithAuth('/call_tool', {
-    method: 'POST',
-    body: JSON.stringify({
-      name: 'add_feed_to_user',
-      arguments: {
-        user_id: podcastData.user_id, // UID
-        email: podcastData.email,     // Email
-        feed_url: podcastData.rss_feed_url,
-        custom_name: podcastData.title || '',
-        active: true,
-      }
-    }),
-  }, agentUrl);
-  return response.json();
-}
-
 import type { User } from "types";
 import { MCP_AGENTS } from "./mcpAgentsConfig";
 
@@ -92,8 +72,8 @@ export async function logout() {
   return response.json();
 }
 
-export async function fetchUser() {
-  const response = await fetchWithAuth('/user/me');
+export async function fetchUser(uid: string) {
+  const response = await fetchWithAuth(`/user/me?uid=${uid}`);
   return response.json();
 }
 
@@ -114,6 +94,52 @@ export async function validateRssFeed(feed_url: string) {
     body: JSON.stringify({
       name: 'validateRssFeed',
       arguments: { feed_url }
+    }),
+  }, agentUrl);
+  return response.json();
+}
+
+// Crear usuario en Firestore tras registro en Firebase Auth
+export async function createUserInFirestore({ uid, email, full_name }: { uid: string; email: string; full_name: string }) {
+  const response = await fetch(`${API_BASE_URL}/user/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid, email, full_name })
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to create user in Firestore');
+  }
+  return response.json();
+}
+// Obtener feeds de usuario
+export async function getUserFeeds(user_id: string) {
+  const agentUrl = MCP_AGENTS['feed-monitor-agent'];
+  if (!agentUrl) throw new Error('MCP agent domain not configured for: feed-monitor-agent');
+  const response = await fetchWithAuth('/call_tool', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'get_user_feeds',
+      arguments: { user_id }
+    }),
+  }, agentUrl);
+  return response.json();
+}
+// Añadir podcast a usuario
+export async function createPodcast(podcastData: { rss_feed_url: string; title?: string; description?: string; user_id: string; email: string }) {
+  const agentUrl = MCP_AGENTS['feed-monitor-agent'];
+  if (!agentUrl) throw new Error('MCP agent domain not configured for: feed-monitor-agent');
+  const response = await fetchWithAuth('/call_tool', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'add_feed_to_user',
+      arguments: {
+        user_id: podcastData.user_id, // UID
+        email: podcastData.email,     // Email
+        feed_url: podcastData.rss_feed_url,
+        custom_name: podcastData.title || '',
+        active: true,
+      }
     }),
   }, agentUrl);
   return response.json();

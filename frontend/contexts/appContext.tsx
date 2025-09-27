@@ -104,15 +104,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
       const firebaseUser = userCredential.user;
-      // Opcional: puedes actualizar el perfil con el nombre
-      // await updateProfile(firebaseUser, { displayName: userData.full_name });
+      // Crear usuario en Firestore
+      await api.createUserInFirestore({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        full_name: userData.full_name
+      });
+      // Obtener datos completos del usuario desde Firestore
+      const firestoreUser = await api.fetchUser();
       const userDataObj = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: userData.full_name,
-          id: firebaseUser.uid,
-          full_name: userData.full_name,
-          photoURL: firebaseUser.photoURL,
+        id: firebaseUser.uid,
+        full_name: userData.full_name,
+        photoURL: firebaseUser.photoURL,
+        onboarding_completed: firestoreUser.onboarding_completed || false,
+        // Puedes añadir otros campos si los necesitas
       };
       dispatch({ type: 'LOGIN_SUCCESS', payload: userDataObj });
     } catch (error: any) {
@@ -124,7 +132,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = async () => {
     try {
-      const user = await api.fetchUser();
+      const uid = state.auth.user?.uid;
+      if (!uid || uid === 'undefined') {
+        dispatch({ type: 'SET_AUTH_ERROR', payload: 'No authenticated user (uid undefined)' });
+        throw new Error('No authenticated user (uid undefined)');
+      }
+      const user = await api.fetchUser(uid);
       dispatch({ type: 'UPDATE_USER', payload: user });
       return user;
     } catch (error: any) {
@@ -145,14 +158,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // const fetchPodcasts = async () => {
-  //   try {
-  //     const podcasts = await api.fetchPodcasts();
-  //     dispatch({ type: 'SET_PODCASTS', payload: podcasts });
-  //   } catch (error: any) {
-  //     dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to fetch podcasts' });
-  //   }
-  // };
+  const fetchPodcasts = async () => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const userId = state.auth.user?.uid;
+      if (!userId) throw new Error('No authenticated user');
+      const result = await api.getUserFeeds(userId);
+      // Map backend feeds to frontend Podcast format
+      const podcasts = (result.feeds || []).map(feed => ({
+        id: feed.feed_id,
+        title: feed.custom_name || feed.feed_url,
+        description: 'TODO',
+        rss_feed_url: feed.feed_url,
+        status: feed.active ? 'active' : 'paused',
+        created_date: feed.added_at || '',
+      }));
+      dispatch({ type: 'SET_PODCASTS', payload: podcasts });
+    } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to fetch podcasts' });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
 
   // const fetchTranslations = async () => {
   //   try {
@@ -206,7 +233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     register,
     fetchUser,
     updateUser,
-    // fetchPodcasts,
+    fetchPodcasts,
     createPodcast,
     // fetchTranslations,
     // uploadVoiceSample,
