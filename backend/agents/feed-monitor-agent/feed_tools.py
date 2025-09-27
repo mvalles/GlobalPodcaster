@@ -14,19 +14,21 @@ def get_user_feeds_main(db, user_id: str):
     feeds = []
     user_ref = db.collection("users").document(user_id)
     feeds_ref = user_ref.collection("feeds")
+    from feed_utils import serialize_dict_recursively
     for feed_doc in feeds_ref.stream():
         feed_data = feed_doc.to_dict()
         feed_id = feed_doc.id
         global_feed_ref = db.collection("feeds").document(feed_id)
         global_feed = global_feed_ref.get()
         feed_url = global_feed.to_dict().get("feed_url", "") if global_feed.exists else ""
-        feeds.append({
+        feed_obj = {
             "feed_id": feed_id,
             "feed_url": feed_url,
             "custom_name": feed_data.get("custom_name", ""),
             "active": feed_data.get("active", True),
             "added_at": feed_data.get("added_at", None),
-        })
+        }
+        feeds.append(serialize_dict_recursively(feed_obj))
     return {
         "status": "success",
         "feeds": feeds,
@@ -39,13 +41,14 @@ def get_all_feeds_main(db):
     """
     feeds = []
     feeds_ref = db.collection("feeds")
+    from feed_utils import serialize
     for feed_doc in feeds_ref.stream():
         feed_data = feed_doc.to_dict()
         feed_id = feed_doc.id
         feed_obj = {
             "feed_id": feed_id,
             "feed_url": feed_data.get("feed_url", ""),
-            "created_at": feed_data.get("created_at", None),
+            "created_at": serialize(feed_data.get("created_at", None)),
             "metadata": feed_data.get("metadata", {}),
         }
         feeds.append(feed_obj)

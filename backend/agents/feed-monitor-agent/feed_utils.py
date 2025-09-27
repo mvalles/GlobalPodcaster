@@ -1,3 +1,13 @@
+def serialize_dict_recursively(obj):
+    """
+    Serializa todos los valores de un dict (incluidos los anidados) usando serialize.
+    """
+    if isinstance(obj, dict):
+        return {k: serialize_dict_recursively(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_dict_recursively(v) for v in obj]
+    else:
+        return serialize(obj)
 """
 Funciones genéricas y utilidades para el agente Feed Monitor MCP.
 Contiene helpers reutilizables para operaciones con Firestore y feeds RSS.
