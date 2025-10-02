@@ -50,6 +50,7 @@ async def create_user(request: Request):
     }, merge=True)
     return JSONResponse(content={"status": "success", "uid": uid})
 
+
 @app.get("/user/me")
 async def get_user(request: Request):
     data = await request.json() if request.method == "POST" else {}
@@ -60,4 +61,23 @@ async def get_user(request: Request):
     user_doc = user_ref.get()
     if not user_doc.exists:
         return JSONResponse(content={"status": "error", "error": "User not found"}, status_code=404)
+    return JSONResponse(content={"status": "success", "user": user_doc.to_dict()})
+
+# Nuevo endpoint para actualizar usuario
+@app.put("/user/me")
+async def update_user(request: Request):
+    data = await request.json()
+    uid = data.get("uid")
+    if not uid:
+        return JSONResponse(content={"status": "error", "error": "uid required"}, status_code=400)
+    user_ref = db.collection("users").document(uid)
+    update_fields = {}
+    # Solo actualiza los campos que llegan en el body
+    for field in ["email", "full_name", "onboarding_completed"]:
+        if field in data:
+            update_fields[field] = data[field]
+    if not update_fields:
+        return JSONResponse(content={"status": "error", "error": "No fields to update"}, status_code=400)
+    user_ref.set(update_fields, merge=True)
+    user_doc = user_ref.get()
     return JSONResponse(content={"status": "success", "user": user_doc.to_dict()})

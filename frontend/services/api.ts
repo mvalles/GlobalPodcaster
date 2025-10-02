@@ -1,8 +1,14 @@
 import type { User } from "types";
 import { MCP_AGENTS } from "./mcpAgentsConfig";
 
-//const API_BASE_URL = 'http://localhost:5555'; // Backend principal (Development)
-const API_BASE_URL = 'https://user-api-production-daed.up.railway.app'; // Backend principal (Production)
+const getEnvVariable = (key: string, fallback: string): string => {
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key] as string;
+  }
+  return fallback;
+};
+
+const API_BASE_URL = getEnvVariable('REACT_APP_API_BASE_URL', 'http://localhost:5555'); // Backend principal
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -144,4 +150,41 @@ export async function createPodcast(podcastData: { rss_feed_url: string; title?:
     }),
   }, agentUrl);
   return response.json();
+}
+
+// Ejemplo de uso en una función fetch
+export async function getFeedList() {
+  const response = await fetch(`${API_BASE_URL}/call_tool`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "get_feed_list", arguments: {} })
+  });
+  return response.json();
+}
+
+// Mock fetchTranslations function
+export async function fetchTranslations() {
+  // Simula una llamada a backend y devuelve datos de ejemplo
+  return [
+    {
+      id: 1,
+      podcast_id: 101,
+      target_language: 'en',
+      status: 'in_progress',
+      progress: 60,
+      episode_count: 12,
+      created_date: '2025-09-01',
+      updated_date: '2025-09-28',
+    },
+    {
+      id: 2,
+      podcast_id: 102,
+      target_language: 'fr',
+      status: 'published',
+      progress: 100,
+      episode_count: 8,
+      created_date: '2025-08-15',
+      updated_date: '2025-09-20',
+    }
+  ];
 }

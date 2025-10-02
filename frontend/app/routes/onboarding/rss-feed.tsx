@@ -27,39 +27,90 @@ import * as api from "services/api";
 
 export default function OnboardingRSSFeed() {
   const navigate = useNavigate();
-  const { createPodcast, state, dispatch } = useApp();
+  const { createPodcast, state, dispatch, fetchPodcasts, fetchTranslations } = useApp();
+  const [userChecked, setUserChecked] = useState(false);
   const [rssUrl, setRssUrl] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-  const [isValid, setIsValid] = useState<boolean | null>(null);
+  const [isValid, setIsValid] = useState(false);
   const [error, setError] = useState("");
-  const [podcastData, setPodcastData] = useState<any>(null);
-  const [hasFeed, setHasFeed] = useState<boolean | null>(null);
-  // Check if user already has a feed
+  const [podcastData, setPodcastData] = useState<{ title?: string; description?: string; rss_feed_url?: string } | null>(null);
+  const [hasFeed, setHasFeed] = useState(false);
+  const [feedChecked, setFeedChecked] = useState(false);
+
+  // LOG: Estado inicial del usuario
   useEffect(() => {
+    if (state && state.auth && state.auth.user) {
+      console.log("[Onboarding] UID:", state.auth.user.uid, "onboarding_completed:", state.auth.user.onboarding_completed);
+    }
+  }, [state.auth.user?.uid, state.auth.user?.onboarding_completed]);
+
+  // Consolidar lógica de redirección y actualización de estado con control estricto
+  useEffect(() => {
+    if (!state.auth.user?.uid || userChecked) return;
+
+    const checkOnboardingStatus = async () => {
+      try {
+        console.log("[Onboarding] Verificando estado de onboarding_completed desde Firebase.");
+        const response = await api.fetchUser(state.auth.user.uid);
+        if (response && response.user && typeof response.user.onboarding_completed !== "undefined") {
+          if (response.user.onboarding_completed !== state.auth.user.onboarding_completed) {
+            console.log("[Onboarding] Actualizando estado global con datos de Firebase:", response.user);
+            dispatch({ type: "UPDATE_USER", payload: { ...state.auth.user, ...response.user } });
+          }
+          if (response.user.onboarding_completed) {
+            console.log("[Onboarding] Redirigiendo directamente al dashboard porque onboarding_completed es TRUE");
+            navigate("/dashboard", { replace: true });
+          }
+        } else {
+          console.error("[Onboarding] Datos inválidos o onboarding_completed no definido en Firebase.");
+        }
+        setUserChecked(true);
+      } catch (error) {
+        console.error("[Onboarding] Error al verificar estado de onboarding_completed:", error);
+      }
+    };
+
+    checkOnboardingStatus();
+  }, [state.auth.user?.uid, userChecked, dispatch, navigate]);
+
+  useEffect(() => {
+    if (!state.auth.user?.uid || feedChecked) return;
+    let cancelled = false;
     const checkUserFeeds = async () => {
-      if (!state.auth.user?.uid) return;
+      if (!state.auth.user) return;
+      if (state.auth.user.onboarding_completed) {
+        setFeedChecked(true);
+        return;
+      }
       try {
         const result = await api.getUserFeeds(state.auth.user.uid);
         setHasFeed(result.feeds && result.feeds.length > 0);
+        if (!cancelled && result.feeds && result.feeds.length > 0 && !state.auth.user.onboarding_completed) {
+          dispatch({ type: "UPDATE_USER", payload: { ...state.auth.user, onboarding_completed: true } });
+          setFeedChecked(true);
+          navigate("/dashboard");
+        } else {
+          setFeedChecked(true);
+        }
       } catch (err) {
-        setHasFeed(false); // fallback: allow onboarding
+        setHasFeed(false);
+        setFeedChecked(true);
       }
     };
     checkUserFeeds();
-  }, [state.auth.user?.uid]);
+    return () => { cancelled = true; };
+  }, [state.auth.user?.uid, feedChecked, state.auth.user, dispatch, navigate]);
 
-  const validateRSSFeed = async (url: string) => {
+  const validateRSSFeed = async (url: any) => {
     if (!url || !url.startsWith('http')) {
       setError("Please enter a valid URL starting with http:// or https://");
       setIsValid(false);
       return;
     }
-
     setIsValidating(true);
     setError("");
     try {
       const result = await api.validateRssFeed(url);
-      
       if (result.is_valid) {
         setIsValid(true);
         setPodcastData({
@@ -71,7 +122,7 @@ export default function OnboardingRSSFeed() {
         setIsValid(false);
         setError(result.error || "This doesn't appear to be a valid podcast RSS feed");
       }
-    } catch (error: any) {
+    } catch (error) {
       setIsValid(false);
       setError("Unable to validate RSS feed. Please check the URL and try again.");
     }
@@ -79,29 +130,31 @@ export default function OnboardingRSSFeed() {
   };
 
   const handleContinue = async () => {
-    if (!podcastData) return;
-
+    if (!podcastData || typeof podcastData.rss_feed_url !== 'string') return;
     try {
       if (createPodcast) {
-        await createPodcast(podcastData);
+        await createPodcast({
+          ...podcastData,
+          rss_feed_url: podcastData.rss_feed_url as string
+        });
       }
-      // Mark onboarding as completed in Firestore and context
       if (state.auth.user?.uid) {
-        const updatedUser = await api.updateUser({ onboarding_completed: true });
-        // Update context so onboarding_completed is reflected immediately
-        if (updatedUser) {
-          dispatch({ type: 'UPDATE_USER', payload: { ...state.auth.user, onboarding_completed: true } });
+        const response = await api.updateUser({ uid: state.auth.user.uid, onboarding_completed: true });
+        if (response && response.user) {
+          dispatch({ type: 'UPDATE_USER', payload: response.user });
         }
       }
+      if (typeof fetchPodcasts === 'function') await fetchPodcasts();
+      if (typeof fetchTranslations === 'function') await fetchTranslations();
       navigate("/dashboard");
     } catch (error: any) {
       setError(error.message || "Error creating podcast. Please try again.");
     }
   };
 
-  const handleUrlChange = (value: string) => {
+  const handleUrlChange = (value: any) => {
     setRssUrl(value);
-    setIsValid(null);
+    setIsValid(false);
     setError("");
     setPodcastData(null);
   };
@@ -109,6 +162,27 @@ export default function OnboardingRSSFeed() {
   const handleValidate = () => {
     validateRSSFeed(rssUrl);
   };
+
+  // Si el usuario aún no está cargado, muestra loader
+  if (!state.auth.user?.uid) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+        <span className="ml-3 text-blue-700">Loading user...</span>
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    if (state.auth.user?.onboarding_completed) {
+      // Usar un flag para evitar múltiples llamadas a navigate
+      let didNavigate = false;
+      if (!didNavigate) {
+        navigate("/dashboard", { replace: true });
+        didNavigate = true;
+      }
+    }
+  }, [state.auth.user?.onboarding_completed, navigate]);
 
   // Show loading or error while checking feeds
   if (hasFeed === null) {
@@ -151,7 +225,6 @@ export default function OnboardingRSSFeed() {
       </div>
     );
   }
-  // ...existing code for onboarding UI...
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
       <motion.div
@@ -225,7 +298,7 @@ export default function OnboardingRSSFeed() {
             </div>
 
             {/* Validation Results */}
-            {isValid === true && podcastData && (
+            {isValid === true && podcastData !== null && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -235,8 +308,8 @@ export default function OnboardingRSSFeed() {
                   <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
                   <div className="flex-1">
                     <h3 className="font-semibold text-green-900 mb-1">Valid RSS Feed!</h3>
-                    <p className="text-green-800 font-medium">{podcastData.title}</p>
-                    {podcastData.description && (
+                    <p className="text-green-800 font-medium">{podcastData?.title}</p>
+                    {podcastData?.description && (
                       <p className="text-green-700 text-sm mt-1 line-clamp-2">
                         {podcastData.description}
                       </p>

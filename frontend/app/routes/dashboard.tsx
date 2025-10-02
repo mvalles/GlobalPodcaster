@@ -24,22 +24,30 @@ export default function Dashboard() {
     refreshData 
   } = usePodcasts();
 
+  const hasLoadedData = React.useRef(false);
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       navigate("/auth/login");
       return;
     }
 
-    if (user && !user.onboarding_completed && podcasts.length === 0) {
+    // Si el usuario no ha completado el onboarding, redirige
+    if (user && user.onboarding_completed === false) {
       navigate("/onboarding/rss-feed");
       return;
     }
 
-    // Load data when component mounts
-    if (isAuthenticated && user?.onboarding_completed) {
+    // Solo carga datos si el usuario ha completado el onboarding y aún no se ha cargado
+    if (isAuthenticated && user?.onboarding_completed && !hasLoadedData.current) {
+      hasLoadedData.current = true;
       refreshData();
     }
-  }, [isAuthenticated, user, authLoading, navigate, refreshData, podcasts.length]);
+  }, [isAuthenticated, user, authLoading, navigate, refreshData]);
+
+  // Si el usuario no ha completado el onboarding, no renderizar dashboard
+  if (user && user.onboarding_completed === false) {
+    return null;
+  }
 
   if (authLoading || isLoading) {
     return (
@@ -82,7 +90,7 @@ export default function Dashboard() {
         >
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              Welcome back, {user?.full_name?.split(' ')[0] || 'there'}! 👋
+              Welcome back, {user?.displayName?.split(' ')[0] || 'there'}! 👋
             </h1>
             <p className="text-gray-600">
               {podcasts.length === 0

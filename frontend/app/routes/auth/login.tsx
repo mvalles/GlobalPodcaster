@@ -19,6 +19,14 @@ export const meta = () => {
 const Login = () => {
   const navigate = useNavigate();
   const { login, isLoading, error, isAuthenticated, user } = useAuth();
+  const [isUserLoaded, setIsUserLoaded] = useState(false);
+  useEffect(() => {
+    if (isAuthenticated && user && typeof user.onboarding_completed !== 'undefined') {
+      setIsUserLoaded(true);
+    }
+    // Solo actualiza una vez para evitar bucles
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
   
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -29,14 +37,14 @@ const Login = () => {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && isUserLoaded) {
       if (user.onboarding_completed) {
         navigate('/dashboard');
       } else {
         navigate('/onboarding/rss-feed');
       }
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, isUserLoaded, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -57,6 +65,16 @@ const Login = () => {
     }
   };
 
+  if (isAuthenticated && !isUserLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-500 rounded-full"></div>
+          <div className="text-xl font-medium text-gray-600">Loading your profile...</div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
