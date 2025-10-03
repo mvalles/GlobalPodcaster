@@ -1,14 +1,12 @@
 import type { User } from "types";
 import { MCP_AGENTS } from "./mcpAgentsConfig";
 
-const getEnvVariable = (key: string, fallback: string): string => {
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key] as string;
-  }
-  return fallback;
-};
+// Solo necesitamos VITE_ porque React Router v7 usa Vite
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5555';
 
-const API_BASE_URL = getEnvVariable('REACT_APP_API_BASE_URL', 'http://localhost:5555'); // Backend principal
+// Debug temporal - eliminar después de verificar
+console.log('API_BASE_URL:', API_BASE_URL);
+console.log('VITE_API_BASE_URL:', import.meta.env?.VITE_API_BASE_URL);
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
