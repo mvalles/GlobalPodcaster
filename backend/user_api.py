@@ -6,6 +6,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 
 app = FastAPI()
 app.add_middleware(
@@ -32,6 +33,8 @@ else:
         firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+"""User/profile management and simple Firestore-backed API"""
+
 @app.post("/user/create")
 async def create_user(request: Request):
     data = await request.json()
@@ -46,6 +49,11 @@ async def create_user(request: Request):
         "email": email,
         "full_name": full_name,
         "onboarding_completed": False,
+        # Optional profile defaults for consistent schema
+        "preferred_languages": [],
+        "voice_sample_url": None,
+        "voice_prompt_seen": False,
+        "notification_preferences": {"email_alerts": True},
         #"feeds": [],
     }, merge=True)
     return JSONResponse(content={"status": "success", "uid": uid})
@@ -73,7 +81,16 @@ async def update_user(request: Request):
     user_ref = db.collection("users").document(uid)
     update_fields = {}
     # Solo actualiza los campos que llegan en el body
-    for field in ["email", "full_name", "onboarding_completed"]:
+    # Extendido para mantener el perfil completo consistente con el frontend
+    for field in [
+        "email",
+        "full_name",
+        "onboarding_completed",
+        "preferred_languages",
+        "voice_sample_url",
+        "voice_prompt_seen",
+        "notification_preferences",
+    ]:
         if field in data:
             update_fields[field] = data[field]
     if not update_fields:
@@ -81,3 +98,6 @@ async def update_user(request: Request):
     user_ref.set(update_fields, merge=True)
     user_doc = user_ref.get()
     return JSONResponse(content={"status": "success", "user": user_doc.to_dict()})
+
+
+# File uploads are handled via Firebase Storage from the frontend.

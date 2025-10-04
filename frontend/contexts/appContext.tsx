@@ -2,7 +2,8 @@ import React, { createContext, useContext, useReducer, useEffect, type ReactNode
 import { appReducer, initialState } from 'reducers/appReducer';
 import type { AppState, User } from '../types';
 import * as api from '../services/api';
-import { auth } from '../firebaseConfig';
+import { auth, storage } from '../firebaseConfig';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -22,7 +23,7 @@ interface AppContextType {
   fetchPodcasts?: () => Promise<void>;
   createPodcast?: (podcastData: CreatePodcastData) => Promise<void>;
   fetchTranslations?: () => Promise<void>;
-  uploadVoiceSample?: (file: File) => Promise<string>;
+  uploadVoiceSample: (file: File) => Promise<string>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -50,25 +51,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Fetch user from Firestore to get onboarding_completed and other fields
         try {
           const firestoreUser = await api.fetchUser(firebaseUser.uid);
-          const userData = {
+          const userData: User = {
             uid: firebaseUser.uid,
-            email: firebaseUser.email || "",
-            displayName: firebaseUser.displayName,
-            id: firebaseUser.uid,
-            full_name: firebaseUser.displayName,
+            email: firebaseUser.email || null,
+            full_name: firestoreUser.full_name ?? firebaseUser.displayName ?? null,
             photoURL: firebaseUser.photoURL,
-            onboarding_completed: firestoreUser.onboarding_completed || false,
-            // Add other fields if needed
+            onboarding_completed: Boolean(firestoreUser?.onboarding_completed),
+            preferred_languages: firestoreUser?.preferred_languages,
+            voice_sample_url: firestoreUser?.voice_sample_url,
+            voice_prompt_seen: Boolean(firestoreUser?.voice_prompt_seen),
+            notification_preferences: firestoreUser?.notification_preferences,
           };
           dispatch({ type: 'LOGIN_SUCCESS', payload: userData });
         } catch (err) {
           // Fallback to basic user if Firestore fetch fails
-          const userData = {
+          const userData: User = {
             uid: firebaseUser.uid,
-            email: firebaseUser.email || "",
-            displayName: firebaseUser.displayName,
-            id: firebaseUser.uid,
-            full_name: firebaseUser.displayName,
+            email: firebaseUser.email || null,
+            full_name: firebaseUser.displayName ?? null,
             photoURL: firebaseUser.photoURL,
             onboarding_completed: false,
           };
@@ -90,15 +90,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const firebaseUser = userCredential.user;
       // Obtener datos completos del usuario desde Firestore
       const firestoreUser = await api.fetchUser(firebaseUser.uid);
-      const userData = {
+      const userData: User = {
         uid: firebaseUser.uid,
-        email: firebaseUser.email || "",
-        displayName: firebaseUser.displayName,
-        id: firebaseUser.uid,
-        full_name: firebaseUser.displayName,
+        email: firebaseUser.email || null,
+        full_name: firestoreUser.full_name ?? firebaseUser.displayName ?? null,
         photoURL: firebaseUser.photoURL,
-        onboarding_completed: firestoreUser.onboarding_completed || false,
-        // Puedes añadir otros campos si los necesitas
+        onboarding_completed: Boolean(firestoreUser?.onboarding_completed),
+        preferred_languages: firestoreUser?.preferred_languages,
+        voice_sample_url: firestoreUser?.voice_sample_url,
+        voice_prompt_seen: Boolean(firestoreUser?.voice_prompt_seen),
+        notification_preferences: firestoreUser?.notification_preferences,
       };
       dispatch({ type: 'LOGIN_SUCCESS', payload: userData });
       // Si tienes onboarding, puedes llamar a fetchPodcasts y fetchTranslations aquí
@@ -127,20 +128,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Crear usuario en Firestore
       await api.createUserInFirestore({
         uid: firebaseUser.uid,
-        email: firebaseUser.email,
+        email: firebaseUser.email ?? userData.email,
         full_name: userData.full_name
       });
       // Obtener datos completos del usuario desde Firestore
       const firestoreUser = await api.fetchUser(firebaseUser.uid);
-      const userDataObj = {
+      const userDataObj: User = {
         uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: userData.full_name,
-        id: firebaseUser.uid,
-        full_name: userData.full_name,
+        email: (firebaseUser.email ?? userData.email) || null,
+        full_name: firestoreUser.full_name ?? userData.full_name ?? null,
         photoURL: firebaseUser.photoURL,
-        onboarding_completed: firestoreUser.onboarding_completed || false,
-        // Puedes añadir otros campos si los necesitas
+        onboarding_completed: Boolean(firestoreUser?.onboarding_completed),
+        preferred_languages: firestoreUser?.preferred_languages,
+        voice_sample_url: firestoreUser?.voice_sample_url,
+        voice_prompt_seen: Boolean(firestoreUser?.voice_prompt_seen),
+        notification_preferences: firestoreUser?.notification_preferences,
       };
       dispatch({ type: 'LOGIN_SUCCESS', payload: userDataObj });
     } catch (error: any) {
@@ -158,7 +160,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw new Error('No authenticated user (uid undefined)');
       }
       const user = await api.fetchUser(uid);
-      dispatch({ type: 'UPDATE_USER', payload: user });
+      const merged: User = {
+        ...(state.auth.user || {} as User),
+        ...user,
+        uid: state.auth.user?.uid || uid,
+      } as User;
+      dispatch({ type: 'UPDATE_USER', payload: merged });
       return user;
     } catch (error: any) {
       dispatch({ type: 'SET_AUTH_ERROR', payload: error.message });
@@ -170,7 +177,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const updatedUser = await api.updateUser(userData);
-      dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+      const merged: User = {
+        ...(state.auth.user || {} as User),
+        ...updatedUser,
+        uid: state.auth.user?.uid || updatedUser?.uid,
+      } as User;
+      dispatch({ type: 'UPDATE_USER', payload: merged });
     } catch (error: any) {
       dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to update user' });
     } finally {
@@ -210,24 +222,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // const uploadVoiceSample = async (file: File) => {
-  //   dispatch({ type: 'SET_LOADING', payload: true });
-  //   try {
-  //     const response = await api.uploadVoiceSample(file);
-  //     
-  //     // Update user with new voice sample URL
-  //     const updatedUser = { ...state.auth.user!, voice_sample_url: response.file_url };
-  //     dispatch({ type: 'UPDATE_USER', payload: updatedUser });
-  //     
-  //     return response.file_url;
-  //   } catch (error: any) {
-  //     dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to upload voice sample' });
-  //     throw error;
-  //   } finally {
-  //     dispatch({ type: 'SET_LOADING', payload: false });
-  //   }
-  // };
-
+  const uploadVoiceSample = async (file: File) => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const uid = state.auth.user?.uid;
+      if (!uid) throw new Error('No authenticated user');
+      const path = `voice-samples/${uid}/${Date.now()}_${file.name}`;
+      const ref = storageRef(storage, path);
+      await uploadBytes(ref, file);
+      const url = await getDownloadURL(ref);
+      // Persist in backend/Firestore
+  await api.updateUser({ uid, voice_sample_url: url, voice_prompt_seen: true });
+  const updatedUser = { ...state.auth.user!, voice_sample_url: url, voice_prompt_seen: true };
+      dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+      return url;
+    } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to upload voice sample' });
+      throw error;
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
 
   const createPodcast = async (podcastData: CreatePodcastData) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -256,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     fetchPodcasts,
     createPodcast,
     fetchTranslations,
-    // uploadVoiceSample,
+    uploadVoiceSample,
   };
 
   return <AppContext.Provider value={contextValue}>

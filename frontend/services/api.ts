@@ -1,12 +1,9 @@
-import type { User } from "types";
+import type { User, Translation } from "types";
 import { MCP_AGENTS } from "./mcpAgentsConfig";
 
 // Solo necesitamos VITE_ porque React Router v7 usa Vite
 const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5555';
 
-// Debug temporal - eliminar después de verificar
-console.log('API_BASE_URL:', API_BASE_URL);
-console.log('VITE_API_BASE_URL:', import.meta.env?.VITE_API_BASE_URL);
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -79,7 +76,8 @@ export async function logout() {
 
 export async function fetchUser(uid: string) {
   const response = await fetchWithAuth(`/user/me?uid=${uid}`);
-  return response.json();
+  const data = await response.json();
+  return data.user ?? data;
 }
 
 export async function updateUser(userData: Partial<User>) {
@@ -87,7 +85,8 @@ export async function updateUser(userData: Partial<User>) {
     method: 'PUT',
     body: JSON.stringify(userData),
   });
-  return response.json();
+  const data = await response.json();
+  return data.user ?? data;
 }
 
 
@@ -161,9 +160,9 @@ export async function getFeedList() {
 }
 
 // Mock fetchTranslations function
-export async function fetchTranslations() {
-  // Simula una llamada a backend y devuelve datos de ejemplo
-  return [
+export async function fetchTranslations(): Promise<Translation[]> {
+  // Simula una llamada a backend y devuelve datos de ejemplo tipados
+  const data: Translation[] = [
     {
       id: 1,
       podcast_id: 101,
@@ -185,4 +184,5 @@ export async function fetchTranslations() {
       updated_date: '2025-09-20',
     }
   ];
+  return data;
 }

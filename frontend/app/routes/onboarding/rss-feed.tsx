@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -37,69 +37,71 @@ export default function OnboardingRSSFeed() {
   const [hasFeed, setHasFeed] = useState(false);
   const [feedChecked, setFeedChecked] = useState(false);
 
-  // LOG: Estado inicial del usuario
-  useEffect(() => {
-    if (state && state.auth && state.auth.user) {
-      console.log("[Onboarding] UID:", state.auth.user.uid, "onboarding_completed:", state.auth.user.onboarding_completed);
-    }
-  }, [state.auth.user?.uid, state.auth.user?.onboarding_completed]);
-
-  // Consolidar lógica de redirección y actualización de estado con control estricto
+  // Sin logs: verificación inicial de estado de usuario solo una vez
   useEffect(() => {
     if (!state.auth.user?.uid || userChecked) return;
-
     const checkOnboardingStatus = async () => {
       try {
-        console.log("[Onboarding] Verificando estado de onboarding_completed desde Firebase.");
-        const response = await api.fetchUser(state.auth.user.uid);
-        if (response && response.user && typeof response.user.onboarding_completed !== "undefined") {
-          if (response.user.onboarding_completed !== state.auth.user.onboarding_completed) {
-            console.log("[Onboarding] Actualizando estado global con datos de Firebase:", response.user);
-            dispatch({ type: "UPDATE_USER", payload: { ...state.auth.user, ...response.user } });
-          }
-          if (response.user.onboarding_completed) {
-            console.log("[Onboarding] Redirigiendo directamente al dashboard porque onboarding_completed es TRUE");
-            navigate("/dashboard", { replace: true });
-          }
-        } else {
-          console.error("[Onboarding] Datos inválidos o onboarding_completed no definido en Firebase.");
+        const currentUser = state.auth.user; // snapshot
+        if (!currentUser) return;
+        const userDoc = await api.fetchUser(currentUser.uid);
+        if (userDoc && typeof userDoc.onboarding_completed !== "undefined") {
+          // Solo despachar si cambia algo relevante para evitar renders en bucle
+            if (
+              userDoc.onboarding_completed !== currentUser.onboarding_completed ||
+              userDoc.voice_sample_url !== currentUser.voice_sample_url ||
+              userDoc.voice_prompt_seen !== currentUser.voice_prompt_seen
+            ) {
+              dispatch({ type: "UPDATE_USER", payload: { ...currentUser, ...userDoc } });
+            }
+            if (userDoc.onboarding_completed) {
+              if (!userDoc.voice_sample_url && !userDoc.voice_prompt_seen) {
+                navigate("/onboarding/voice-sample", { replace: true });
+              } else {
+                navigate("/dashboard", { replace: true });
+              }
+            }
         }
         setUserChecked(true);
-      } catch (error) {
-        console.error("[Onboarding] Error al verificar estado de onboarding_completed:", error);
+      } catch {
+        setUserChecked(true); // evitar reintentos infinitos en error
       }
     };
-
     checkOnboardingStatus();
   }, [state.auth.user?.uid, userChecked, dispatch, navigate]);
 
+  // Efecto de feeds: dependencias reducidas para evitar re-render en cascada
   useEffect(() => {
     if (!state.auth.user?.uid || feedChecked) return;
     let cancelled = false;
+    const currentUser = state.auth.user; // snapshot estable
     const checkUserFeeds = async () => {
-      if (!state.auth.user) return;
-      if (state.auth.user.onboarding_completed) {
+      if (!currentUser) return;
+      if (currentUser.onboarding_completed) {
         setFeedChecked(true);
         return;
       }
       try {
-        const result = await api.getUserFeeds(state.auth.user.uid);
-        setHasFeed(result.feeds && result.feeds.length > 0);
-        if (!cancelled && result.feeds && result.feeds.length > 0 && !state.auth.user.onboarding_completed) {
-          dispatch({ type: "UPDATE_USER", payload: { ...state.auth.user, onboarding_completed: true } });
+        const result = await api.getUserFeeds(currentUser.uid);
+        const hasAny = Boolean(result.feeds && result.feeds.length > 0);
+        setHasFeed(hasAny);
+        if (!cancelled && hasAny && !currentUser.onboarding_completed) {
+          // Actualizar usuario solo si realmente cambia onboarding_completed
+          dispatch({ type: "UPDATE_USER", payload: { ...currentUser, onboarding_completed: true } });
           setFeedChecked(true);
-          navigate("/dashboard");
+          const needsVoice = !currentUser.voice_sample_url && !currentUser.voice_prompt_seen;
+          navigate(needsVoice ? "/onboarding/voice-sample" : "/dashboard");
         } else {
           setFeedChecked(true);
         }
-      } catch (err) {
+      } catch {
         setHasFeed(false);
         setFeedChecked(true);
       }
     };
     checkUserFeeds();
     return () => { cancelled = true; };
-  }, [state.auth.user?.uid, feedChecked, state.auth.user, dispatch, navigate]);
+  }, [state.auth.user?.uid, feedChecked, dispatch, navigate]);
 
   const validateRSSFeed = async (url: any) => {
     if (!url || !url.startsWith('http')) {
@@ -173,14 +175,10 @@ export default function OnboardingRSSFeed() {
     );
   }
 
+  // Redirección tardía de seguridad si onboarding ya completado
   useEffect(() => {
     if (state.auth.user?.onboarding_completed) {
-      // Usar un flag para evitar múltiples llamadas a navigate
-      let didNavigate = false;
-      if (!didNavigate) {
-        navigate("/dashboard", { replace: true });
-        didNavigate = true;
-      }
+      navigate("/dashboard", { replace: true });
     }
   }, [state.auth.user?.onboarding_completed, navigate]);
 

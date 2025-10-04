@@ -22,7 +22,7 @@ import { useApp } from "contexts/appContext";
 
 export default function OnboardingVoiceSample() {
   const navigate = useNavigate();
-  const { uploadVoiceSample, state } = useApp();
+  const { uploadVoiceSample, updateUser, state } = useApp();
   
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -110,8 +110,17 @@ export default function OnboardingVoiceSample() {
     navigate("/onboarding/languages");
   };
 
-  const handleSkip = () => {
-    navigate("/onboarding/languages");
+  const handleSkip = async () => {
+    try {
+      const uid = state.auth.user?.uid;
+      if (uid) {
+        await updateUser({ uid, voice_prompt_seen: true });
+      }
+    } catch (e) {
+      // non-blocking
+    } finally {
+      navigate("/onboarding/languages");
+    }
   };
 
   return (

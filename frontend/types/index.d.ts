@@ -1,12 +1,14 @@
 export interface User {
   uid: string; // Firebase UID, también usado como id
   email: string | null;
-  displayName: string | null; // Firebase displayName, también usado como full_name
+  // Usamos sólo full_name (Firestore) en todo el frontend
+  full_name?: string | null;
   photoURL?: string | null;
   // Campos personalizados opcionales
   onboarding_completed?: boolean;
   preferred_languages?: string[];
   voice_sample_url?: string;
+  voice_prompt_seen?: boolean; // Whether user has been shown or skipped the voice sample prompt
   notification_preferences?: {
     email_alerts: boolean;
   };
